@@ -747,7 +747,7 @@
     "menu.settings": {
       "title": "Instellingen",
       "steps": [
-        "Spellessen hebben drie modi: Uit, Normaal en Uitgebreid. Normaal behandelt basisacties en overleven. Uitgebreid voegt gedetailleerde lessen toe. Je kunt tegengekomen lessen herlezen of de lesvoortgang van deze kroniek afzonderlijk wissen. Besturingslessen en skelettips hebben eigen instellingen."
+        "De speluitleg hebben drie modi: Uit, Normaal en Uitgebreid. Normaal behandelt basisacties en overleven. Uitgebreid voegt gedetailleerde lessen toe. Je kunt ontdekte lessen herlezen of de lesvoortgang van deze Kroniek afzonderlijk wissen. Uitleg over de bediening en tips van skeletten hebben eigen instellingen."
       ],
       "source_sha256": "ae082ca4977bc56d6c9f5214cc4bc9148d569956d1ea60eb551b36a444b69a2d"
     },
@@ -2165,7 +2165,7 @@
       "title": "Ondiep water",
       "steps": [
         "Ondiep water in, door of uit lopen kost 50% meer bewegingstijd. Door het gespetter krijg je -3 op Sluipen. Stilstaan kost geen extra bewegingstijd. Water breekt je geurspoor, maar vijanden kunnen je nog zien of horen.",
-        "Als je gezond bent, geeft elk watervakje dat je te voet betreedt 0,5% basiskans op blootstelling aan ziekte, zonder rekening te houden met immuniteit of Gehardheid. Stilstaan leidt niet tot een nieuwe besmettingsworp. Een geslaagde sprong voorkomt contact met water en gespetter, maar de landing maakt nog lawaai. Ziekte houdt aan tijdens het rusten. Een kruid of drankje van Genezing, of Miruvor, geneest elke ziekte. Andere geneeskruiden werken tegen alle ziekten behalve de plaag van Angband."
+        "Als je gezond bent, geeft elk watervakje dat je te voet betreedt 0,5% basiskans op blootstelling aan ziekte, zonder rekening te houden met immuniteit of Gehardheid. Stilstaan leidt niet tot een nieuwe besmettingsworp. Een geslaagde sprong voorkomt contact met water en gespetter, maar de landing maakt nog lawaai. Ziekte houdt aan tijdens het rusten. Een kruid of drankje van Genezing, of Miruvor, geneest elke ziekte. Andere geneeskruiden werken alleen tegen de ziekte waarvoor ze bestemd zijn, en tegen de plaag van Angband bestaat geen ziektespecifiek kruid."
       ],
       "source_sha256": "2db23b5559af8e90b15007a978cd514300ea076fe79efbe2e2467d404d8349cd"
     },
@@ -2877,9 +2877,9 @@
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },
     "quest.6": {
-      "title": "Varda, de Sterkoningin",
+      "title": "Varda, Vrouwe van de Sterren",
       "steps": [
-        "{detail} Bekijk de onthulde bestemming bij Opdrachten. Varda’s proef vindt plaats op de eerste verdieping die je na 500 voet bereikt. Dood Duruin voor je die verdieping verlaat, anders vervalt de opdracht. Plan je afdaling van tevoren. Onverkende locaties blijven onbekend."
+        "{detail} Bekijk de onthulde bestemming bij Opdrachten. Varda’s proef vindt plaats op de eerste verdieping die je dieper dan 500 voet bereikt. Dood Duruin voordat je die verdieping verlaat, anders vervalt de opdracht. Plan je afdaling voordat je de verdieping betreedt. Onverkende locaties blijven onbekend."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },

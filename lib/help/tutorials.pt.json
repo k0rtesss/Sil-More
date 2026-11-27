@@ -2284,7 +2284,7 @@
     "effect.240": {
       "title": "Terror — efeito conhecido",
       "steps": [
-        "O chifre tenta assustar as criaturas atingidas. Escolha a direção e confira o custo em Voz. O som pode alertar outras criaturas."
+        "O som da trompa pode assustar as criaturas atingidas. Escolha a direção e confira o custo em Voz. O som pode alertar outras criaturas."
       ],
       "source_sha256": "c5a7ad98668a9653b3864f897c77b20cc4344b226e9ded5b4200fe86013447ee"
     },
@@ -2312,7 +2312,7 @@
     "effect.250": {
       "title": "Alerta — efeito conhecido",
       "steps": [
-        "Dá um aviso estrondoso e desafia os inimigos próximos. Isso chama atenção. Só use este chifre quando quiser esse efeito."
+        "Dá um aviso estrondoso e desafia os inimigos próximos. Isso chama atenção. Só use esta trompa quando quiser esse efeito."
       ],
       "source_sha256": "09312e0b004da28833632d383e0a8a344c3ade5029977b3c1c06091b11ca9612"
     },

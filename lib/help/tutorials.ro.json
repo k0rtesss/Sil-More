@@ -6,7 +6,7 @@
       "title": "Primii tăi pași",
       "steps": [
         "Bun venit în Sil-More. Scopul tău este să recuperezi un Silmaril și să scapi din Angband. Explorează cu grijă. Lumea așteaptă cât timp citești. „Continuă” deschide pagina următoare, iar „Sari peste lecție” închide lecția curentă. Butonul „Mod” îți oferă trei opțiuni: Dezactivat, Normal și Extins.",
-        "Înainte de luptă, caută o armă și o armură potrivite. Citește descrierea fiecărui obiect înainte de a-l folosi sau echipa. Rucsacul (Pack) servește la depozitare. La centură (Harness) ai obiectele la îndemână. Ataci cu arma activă.",
+        "Înainte de luptă, caută o armă și o armură potrivite. Citește descrierea fiecărui obiect înainte de a-l folosi sau echipa. Rucsacul (Pack) servește la depozitare. În harnașament (Harness) ai obiectele la îndemână. Ataci cu arma activă.",
         "Pe teren liber înaintezi un pătrat în direcția aleasă. Deplasarea ia timp și creaturile din apropiere pot acționa între timp. Verifică dacă în pătratul țintă sunt inamici, capcane sau teren periculos. „Continuă” te readuce în joc, unde îți alegi următoarea acțiune."
       ],
       "source_sha256": "54bb70a24ff744c624e83c6bfdfd5d523d6f8de9853aadd150069bdb8ada90fe"
@@ -52,7 +52,7 @@
     "combat.surrounded": {
       "title": "Mai mulți inamici alături",
       "steps": [
-        "Mai mulți inamici sunt lângă tine. Ei obțin un bonus de atac datorită faptului că sunt înconjurați. O ușă sau un pasaj îngust poate limita numărul de inamici care te pot ataca simultan. \"Lupta în masă\" reduce acest bonus la jumătate."
+        "Mai mulți inamici sunt lângă tine. Ei primesc un bonus la atac pentru că te înconjoară. Dacă stai într-o ușă sau într-un pasaj îngust, mai puțini pot ajunge la tine deodată. Abilitatea Crowd Fighting le înjumătățește bonusul de încercuire."
       ],
       "source_sha256": "c3f14764b74a8ed09db31b7acc094e111e88869d43a24fccb3e82d6d121e85ab"
     },
@@ -66,7 +66,7 @@
     "world.depth": {
       "title": "Un nivel nou",
       "steps": [
-        "{detail} Scările și coridoarele creează o hartă nouă atunci când schimbați adâncimea. Părăsirea unui nivel abandonează configurația actuală și obiectele rămase. Verificați-vă obiectivul și proviziile mai întâi; revenirea la acea adâncime generează o hartă nouă."
+        "{detail} Când urci sau cobori pe scări ori printr-un puț, se generează o hartă nouă. Dacă părăsești nivelul, pierzi harta actuală și obiectele rămase acolo. Verifică-ți mai întâi obiectivul și proviziile. Dacă revii la aceeași adâncime, vei găsi altă hartă."
       ],
       "source_sha256": "e3271845b29a13dc6b4a96a2a12413dcf73f45bfc76a752e41afb50aa350f94a"
     },
@@ -78,7 +78,7 @@
       "source_sha256": "f94f5c29b927aa34e7c8e4fad93f170fa447c8cddc50ede6139b0e73461402c2"
     },
     "item.first_description": {
-      "title": "Citiți instrucțiunile înainte de a utiliza obiectul",
+      "title": "Citește descrierea unui obiect înainte să-l folosești",
       "steps": [
         "{subject} se află la picioarele tale sau printre lucrurile tale. Deschide fișa ca să vezi ce știe deja eroul tău înainte de a alege ce faci. Greutatea este în livre (lb), iar volumul în quarte (qt). {detail}",
         "Alege \"Examinează obiectul\" pentru a inspecta obiectul de la picioarele tale. Pentru obiectele purtate, selectează obiectul din browserul inventarului și deschide-i previzualizarea. Citirea este gratuită; poți pleca fără a ridica, echipa sau folosi orice."
@@ -151,7 +151,7 @@
     "item.description.staff": {
       "title": "Descriere: toiag magic",
       "steps": [
-        "{subject}. {detail} Bastonul unui vrăjitor are un efect magic și un număr limitat de utilizări. Citați efectul atunci când este cunoscut și verificați numărul de utilizări rămase atunci când este dezvăluit. Cunoașterea tipului nu dezvăluie neapărat numărul de utilizări ale acestui anumit baston al vrăjitorului. Citirea acestei descrieri nu consumă nicio utilizare."
+        "{subject}. {detail} Un toiag are un efect magic și un număr limitat de încărcături. Citește descrierea efectului dacă îl cunoști și verifică încărcăturile rămase dacă sunt afișate. Chiar dacă recunoști tipul de toiag, poți să nu știi câte încărcături mai are exemplarul din mâna ta. Citirea descrierii nu consumă nicio încărcătură."
       ],
       "source_sha256": "6a45ce5711d0fea798c7beae9bb8c2987e2285e41c4a76d91a7eb86a6f84427a"
     },
@@ -200,21 +200,21 @@
     "item.throwing": {
       "title": "Arme de aruncat",
       "steps": [
-        "Utilizarea armelor aruncate necesită folosirea atacului apropiat pentru precizie, cu penalizări pentru distanță. Puneți o armă în centură, apoi selectați-o în meniul \"Schimbă arma activă\" înainte de a o arunca. Unele abilități permit, de asemenea, aruncări rapide fără a schimba arma activă. În meniu: Change Active."
+        "La aruncare, precizia depinde de deprinderea de luptă corp la corp și scade cu distanța. Pregătește arma în harnașament și selecteaz-o în „Schimbă arma activă” pentru o aruncare obișnuită. Anumite aptitudini permit și aruncări rapide fără schimbarea armei active."
       ],
       "source_sha256": "002c3234ef47e8dbf5c525122cc0a7a3cdea763d1805d88b99329f37369bfaac"
     },
     "item.bow": {
       "title": "Arcuri",
       "steps": [
-        "\"Pregătește\" arcul și săgețile, apoi alege arcul în \"Schimbă arcul activ\". Arcul determină acuratețea; forța și greutatea arcului influențează daunele. Lansarea de săgeți lângă inamici atenți le poate oferi atacuri gratuite. \"Arcul la distanță mică\" te protejează doar de ținta adiacentă. În meniu: Change Active."
+        "Pregătește un arc și săgeți, apoi selectează arcul din meniul Change Active. Precizia depinde de deprinderea Tir cu arcul. Forța și greutatea arcului influențează daunele. Dacă tragi lângă inamici în alertă, aceștia pot ataca fără să consume o tură. Point Blank Archery te protejează doar de atacul țintei adiacente."
       ],
       "source_sha256": "d806c42d2237f2c5f4cf8e8976ac41421596ffcddce842758f2cb4416e258acc"
     },
     "item.arrows": {
       "title": "Săgețile și tolba",
       "steps": [
-        "Să folosiți săgețile \"Gata\" din tolbă pentru a le lansa cu arcul. Săgețile suplimentare pot fi păstrate în rucsac. Când aveți mai mult de un set de săgeți \"Gata\", comanda \"Selectează activ\" vă permite să alegeți care să o lansați. Schimbarea doar a setului de săgeți este gratuită. În meniu: Change Active."
+        "Pregătește săgețile în tolbă ca să le poți trage cu arcul. Rezervele pot sta în rucsac. Dacă ai mai multe mănunchiuri pregătite, alege-l pe cel dorit din „Schimbă arma activă”. Schimbarea săgeților fără a schimba arma nu consumă timp."
       ],
       "source_sha256": "461b1e4123678a3bcc9eae5689619741a221aa5b3f788e09e06930ea3aa4909e"
     },
@@ -228,7 +228,7 @@
     "item.shield": {
       "title": "Scuturi",
       "steps": [
-        "Un scut este eficient doar atunci când arma principală este ținută în mână. Armele de două mâini, în mod normal, împiedică folosirea scutului. Cu ajutorul \"Blocării\", scutul tău oferă protecție dublă, dacă nu ai făcut niciun mișcare în ultima rundă."
+        "Scutul te protejează doar dacă arma activă îți lasă o mână liberă. În mod normal, o armă de două mâini împiedică folosirea scutului. Cu abilitatea Blocare, scutul oferă protecție dublă dacă nu te-ai deplasat în tura precedentă."
       ],
       "source_sha256": "d33ba72c09fb77c5ac5465870489d3ae5df60fb5a540fd89fd3f5e53cccd3931"
     },
@@ -270,7 +270,7 @@
     "item.oil": {
       "title": "Recipiente pentru ulei",
       "steps": [
-        "Combustibilul este stocat într-un slot de \"Resurse\". Un recipient poate conține până la 2.500 de unități de combustibil pentru lămpi. Folosiți comanda \"Reîncărcare\" cu o lampă potrivită; torcelele necesită o metodă de reîncărcare diferită. În meniu: Refuel."
+        "Uleiul are un loc rezervat la provizii. Un recipient conține combustibil pentru cel mult 2.500 de ture de iluminat cu felinarul. Alege „Completează combustibilul” pentru un felinar compatibil. Torțele se realimentează altfel."
       ],
       "source_sha256": "6819ab50906ce7592bc8009eb548dfc1203a5851e28a80c92addbfa02251259a"
     },
@@ -298,7 +298,7 @@
     "world.chest": {
       "title": "Deschiderea cuferelor",
       "steps": [
-        "Se deschide un coș pe podeaua dungeonului. Folosiți meniul contextual pentru a-l inspecta, pentru a dezamorsa o capcană descoperită sau pentru a-l deschide. Aceste acțiuni necesită ture, iar încercările eșuate pot fi periculoase. Deschiderea eliberează conținutul; un coș gol nu poate depozita obiectele dumneavoastră."
+        "Deschizi cufărul acolo unde se află, pe podeaua temniței. Din meniul său poți să-l examinezi, să dezamorsezi o capcană descoperită sau să-l deschizi. Aceste acțiuni consumă ture, iar o încercare eșuată poate fi periculoasă. Când deschizi cufărul, conținutul cade pe podea. Nu îți poți depozita obiectele într-un cufăr gol."
       ],
       "source_sha256": "8ed3e774088a0dd92cc8922dd96aefb2530a26dede0b2516923fc1e760978326"
     },
@@ -312,35 +312,35 @@
     "item.item": {
       "title": "Folosirea obiectelor",
       "steps": [
-        "Citiți descrierea obiectului și acțiunile disponibile. Rucsacul, centura, tobulă, \"Stocul\" și echipamentul purtat au scopuri și capacități diferite. Meniul obiectelor indică unde poate fi folosit acest obiect și ce puteți face cu el."
+        "Citește descrierea obiectului și verifică acțiunile disponibile. Rucsacul, harnașamentul, tolba, proviziile și echipamentul purtat au roluri și capacități diferite. Meniul obiectului arată unde îl poți pune și ce poți face cu el."
       ],
       "source_sha256": "d2e5c5a7bb871f01e7fc1fc4f0ffad221658d5caebb6fd2f3792fa99fbc166f5"
     },
     "item.staff": {
       "title": "Toiege magice",
       "steps": [
-        "Bârfurile vrăjitorului consumă puncte pentru a produce efectul cunoscut. Ține o bârfă \"Pregătită\" în centură pentru acces rapid; folosirea unei bârfe din rucsac necesită timp suplimentar. Citește efectul și numărul de puncte rămase înainte de a o folosi. Citirea descrierii nu consumă puncte."
+        "Toiegele consumă încărcături pentru a-și produce efectul cunoscut. Pregătește toiagul în Harnașament ca să-l ai la îndemână. Folosirea lui din Rucsac necesită timp suplimentar. Înainte să-l folosești, verifică-i efectul și numărul de încărcături rămase. Citirea descrierii nu consumă nicio încărcătură."
       ],
       "source_sha256": "ffb0c70961d3a24aa91d7337dbff9a29ece2bb3afe3e879659651c9a794bc266"
     },
     "item.horn": {
       "title": "Cornuri",
       "steps": [
-        "Corna consumă Voce și produc un zgomot puternic. Citiți efectul cunoscut, apoi țintiți în direcția dorită. De obicei, costă 20 de Voce, sau 10 cu \"Concentrarea\". Sunetul unei corni poate alerta alte creaturi."
+        "Când sufli într-un corn, consumi puncte de voce și faci zgomot. Citește descrierea efectului cunoscut, apoi alege direcția. Costul obișnuit este de 20 de puncte de voce sau 10 dacă ai aptitudinea Canalizare. Sunetul poate alerta alte creaturi."
       ],
       "source_sha256": "5899033d90b74d6290c29c056115381c88d9529a0742bc2df2e81ba709276725"
     },
     "item.staff.ready": {
       "title": "Pregătește un toiag",
       "steps": [
-        "Deschide inventarul, selectează toiagul și alege Ready pentru a muta obiectul la centură. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
+        "Deschide inventarul, selectează toiagul și alege „Pregătește” ca să muți obiectul în harnașament. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
       ],
       "source_sha256": "6d9ae83430825c2768a4ecb135e730cda5c495dafd875172e486ff4ec59317db"
     },
     "item.staff.use": {
       "title": "Folosește un toiag identificat",
       "steps": [
-        "Acest stafie al vraciului, identificat, este pregătit și are suficientă energie pentru a produce un efect util. {detail} Omită această acțiune dacă preferi să-ți păstrezi animalele de companie.",
+        "Toiagul este identificat, pregătit și are suficiente încărcături pentru a-și produce efectul. {detail} Dacă vrei să păstrezi încărcăturile pentru mai târziu, sari peste acest pas.",
         "Folosește o dată toiagul identificat și alege o țintă dacă ți se cere. O folosire încheiată termină exercițiul. Anulează alegerea sau sari peste lecție pentru a păstra încărcătura."
       ],
       "source_sha256": "e7c2f9e8f846b7f24472e03f429853f020291720fefda11aa8447a1eb9009833"
@@ -348,7 +348,7 @@
     "item.horn.ready": {
       "title": "Pregătește un corn",
       "steps": [
-        "Deschide inventarul, selectează cornul și alege Ready pentru a muta obiectul la centură. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
+        "Deschide inventarul, selectează cornul și alege „Pregătește” ca să muți obiectul în harnașament. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
       ],
       "source_sha256": "69939b5719d6b60428c241c381ab39de389314983d498a6e4c2afbaad51cf6ab"
     },
@@ -412,7 +412,7 @@
     "status.stun": {
       "title": "Amețire",
       "steps": [
-        "{detail} Stun reduce toate abilitățile cu 2, sau cu 4, dacă nivelul de severitate este de 50 sau mai mare. La un nivel de peste 100, sunteți paralizat și nu puteți acționa. Clarity sau Miruvor anulează efectul de Stun; folosiți-le în timp ce încă puteți acționa."
+        "{detail} Amețirea îți reduce toate deprinderile cu 2 puncte sau cu 4 dacă intensitatea ajunge la cel puțin 50. Peste 100 îți pierzi cunoștința și nu mai poți acționa. O poțiune de claritate sau de Miruvor înlătură amețirea. Bea-o cât încă poți acționa."
       ],
       "source_sha256": "3e8b128e72352e22428e57ba9475c2566409c7796684a4e1c19e379bd193140f"
     },
@@ -602,7 +602,7 @@
     "status.poisoned.remedy": {
       "title": "Remediu: otrăvire",
       "steps": [
-        "Antidotul sau Miruvorul îndepărtează otrăvurile. Împiedică otrăvirea ulterioară, deși viața pierdută poate totuși necesita vindecare. Un remediu cunoscut este disponibil acum. Omitiți dacă preferați o altă acțiune.",
+        "Antidotul sau Miruvor elimină otrava. Aceasta nu îți va mai provoca daune, dar s-ar putea să ai nevoie de vindecare pentru viața deja pierdută. Ai la îndemână un remediu cunoscut. Dacă preferi altă acțiune, sari peste acest pas.",
         "Alege și folosește un remediu cunoscut pentru otrăvire. Folosirea unui obiect potrivit încheie exercițiul. Anulează alegerea sau sari peste lecție pentru a păstra obiectul."
       ],
       "source_sha256": "96a906a513605513cf12de2663cc72073619ce7fbc9814da2e3e04a0c08de8d8"
@@ -754,35 +754,35 @@
     "menu.inventory": {
       "title": "Inventar",
       "steps": [
-        "Eșantioanele tale sunt împărțite în rucsac, centură, tolbă, \"provizii\" și echipament purtat. Selectează un obiect pentru a citi locația, greutatea, volumul și acțiunile disponibile. Navigarea este gratuită. O acțiune de tip \"răscruce\" necesită trei ture și atacurile pot întrerupe această acțiune."
+        "Obiectele sunt împărțite între Rucsac, Harnașament, Tolbă, Provizii și echipamentul purtat. Selectează un obiect ca să vezi unde se află, cât cântărește, cât spațiu ocupă și ce poți face cu el. Consultarea inventarului nu consumă timp. Dacă iei ceva din rucsac, acțiunea durează trei ture și poate fi întreruptă de un atac."
       ],
       "source_sha256": "bec25bdb79057f7ee3c2aa19e6a83c190e7cc179d6f3636bfbbcef8bd30717b5"
     },
     "menu.pack": {
       "title": "Rucsacul (Pack)",
       "steps": [
-        "Rucsacul conține echipament și provizii suplimentare, în limita capacității sale. Utilizarea articolelor din rucsac necesită trei ture; un atac poate întrerupe acest proces. Mută echipamentul urgent în centură sau în secțiunea \"Provizii\" atunci când ai timp să te pregătești."
+        "În rucsac păstrezi echipament de rezervă și provizii, în limita volumului disponibil. O acțiune care necesită acces la rucsac durează trei ture și poate fi întreruptă de un atac. Cât timp te poți pregăti, mută lucrurile de care vei avea nevoie imediat în harnașament sau la provizii."
       ],
       "source_sha256": "8ff5559af49a6e5c123113c7156c935dc3ff936506be1e03fccd700f2f04f53c"
     },
     "menu.harness": {
-      "title": "Centura (Harness)",
+      "title": "Harnașamentul (Harness)",
       "steps": [
-        "Centura conține echipamentul pregătit în limitele sale. Selectați \"Pregătit\" pe un obiect de pe rucsac pentru a-l muta aici, sau \"Nepregătit\" pentru a-l depozita din nou. Un armă pregătită trebuie, de asemenea, selectată în \"Schimbă arma activă\" înainte de a o folosi în mod normal. În meniu: Change Active, Unready, Ready."
+        "În harnașament ții echipamentul pregătit, în limita volumului disponibil. Alege „Pregătește” pentru a muta aici un obiect potrivit din rucsac sau pune-l înapoi în rucsac pentru depozitare. Ca să ataci în mod obișnuit cu o armă pregătită, selecteaz-o și în „Schimbă arma activă”."
       ],
       "source_sha256": "23cb4a9a0a6d5812faf908f8c385549e6e1636fbf5a3f609129d3a751eb9ae3f"
     },
     "menu.quiver": {
       "title": "Tolba (Quiver)",
       "steps": [
-        "Tolibă conține pachete de săgeți, respectând limitele sale de capacitate. Selectați un pachet pentru a verifica cantitatea și acțiunile disponibile. Schimbarea doar a pachetului de săgeți activ este gratuită; alte modificări ale armelor active își mențin costurile normale."
+        "În tolbă ții mănunchiurile de săgeți pregătite pentru tragere, în limita capacității ei. Selectează un mănunchi ca să vezi câte săgeți conține și ce poți face cu ele. Dacă schimbi doar săgețile active, nu consumi timp. Schimbarea armei active își păstrează costul obișnuit."
       ],
       "source_sha256": "92eedf94b49276036594749960f2d51ead3307dd7018dcaff403683a3f2fdf80"
     },
     "menu.equipment": {
       "title": "Echipament",
       "steps": [
-        "Armura și bijuteriile uzate oferă efectele aferente. Armele pregătite sunt disponibile pentru a fi selectate, iar arma pe care o folosești în prezent este cea cu care ataci. Verifică și scutul activ: o armă de două mâini necesită, de obicei, ambele mâini."
+        "Armura și bijuteriile își oferă efectele cât timp le porți. Dintre armele pregătite o alegi pe cea activă, cu care ataci. Verifică și dacă scutul este activ: o armă de două mâini îți ocupă de obicei ambele mâini."
       ],
       "source_sha256": "e1f99841f5863770a3e25b1c0794ebd4965ad2906ccb9551f45ca8edf4dafca7"
     },
@@ -796,7 +796,7 @@
     "menu.active-weapon": {
       "title": "Arma activă",
       "steps": [
-        "Alege o armă din echipamentul tău pentru a ataca. Acest lucru poate influența dacă o armură este activă. Schimbarea armelor active de obicei necesită timp; unele abilități îți oferă o singură schimbare gratuită înainte de următoarea acțiune. Schimbarea doar a săgeților este gratuită."
+        "Alege dintre armele pregătite arma cu care ataci. Alegerea poate schimba și dacă poți folosi scutul. Schimbarea armei active consumă în mod normal timp. Unele aptitudini permit o schimbare gratuită înainte de următoarea acțiune. Dacă schimbi doar săgețile, nu consumi timp."
       ],
       "source_sha256": "ff66b490f231c6fafcdc6dbeac9abf6b7920ca9fcff798517e172890b255952a"
     },
@@ -864,7 +864,7 @@
       "source_sha256": "dd7c234391bd97625ffb1c2ebfb4bbbd1210958def7daa68d6436cb99c5b110d"
     },
     "menu.knowledge-monsters": {
-      "title": "Memoria monștrilor",
+      "title": "Ce știi despre monștri",
       "steps": [
         "Jurnalul de atacuri, rezistențe și alte trăsături pe care le-ați învățat despre monștri. Informațiile lipsă sunt încă necunoscute. Utilizați comanda \"Observă\" pentru a verifica nivelul de conștientizare, moralul și poziția unui monstru."
       ],
@@ -985,14 +985,14 @@
     "ability.2.preview": {
       "title": "Împingere (Knock Back)",
       "steps": [
-        "Atacurile tale apropiate pot împinge un inamic cu un pătrat, dacă forța ta este mai mare decât constituția sa; un inamic aflat pe gheață se deplasează cu până la două pătrate. Verifică spațiul din spatele țintei: deplasarea poate schimba cine te poate ataca și poate trimite o creatură într-un pericol."
+        "O lovitură corp la corp poate împinge inamicul înapoi o căsuță dacă forța ta învinge constituția lui la probă. Dacă se află pe gheață și nu zboară, poate aluneca până la două căsuțe. Verifică terenul din spatele țintei: împingerea o poate arunca într-un pericol sau poate schimba cine te poate ataca."
       ],
       "source_sha256": "85e2c8c7bdb0c638a03dcbf9c1348b610202e234f3bd7f73b8d9e4b6fab7c854"
     },
     "ability.3.preview": {
       "title": "Aruncare (Throwing)",
       "steps": [
-        "Obțineți +1 la atac cu arme de aruncat, reduceți penalizările de distanță și faceți aruncările critice mai ușoare. Prin învățarea tehnicilor de aruncat, volumul de echipament pentru arme de aruncat scade cu 20%. De asemenea, permite aruncări rapide cu pumnale de aruncat, fără a folosi arme de luptă, sau în timp ce o armă de luptă cu o singură mână sau o armă de luptă cu două mâini, o armă de aruncat sau un arc scurt sunt active.",
+        "Primești +1 la atac cu armele de aruncat. Penalizările pentru distanță se înjumătățesc și poți obține mai ușor lovituri critice. Dacă înveți tu aptitudinea, armele de aruncat ocupă cu 20% mai puțin loc în harnașament. Poți arunca rapid pumnale din harnașament când nu ai echipată o armă de luptă corp la corp sau când arma activă este o armă de o mână ori de o mână și jumătate, o armă de aruncat sau un arc scurt.",
         "Prima schimbare a armei active înainte de următoarea acțiune este gratuită, în cazul armelor aruncate. „Warden” extinde această opțiune și la lupte apropiate/aruncate și la lupte apropiate/lupte apropiate; „Versatility” extinde această opțiune și la aruncarea cu arcul/aruncarea, și la aruncarea cu arcul/aruncarea cu arcul. Cu ambele abilități, „Warden” și „Versatility”, schimbarea gratuită poate fi între orice armă activă."
       ],
       "source_sha256": "602158ba425c20d7d1206d05cb888b280fe49818bc4bd63b8040759a1729c119"
@@ -1000,7 +1000,7 @@
     "ability.4.preview": {
       "title": "Măiestria armelor cu coadă lungă (Polearm Mastery)",
       "steps": [
-        "În timp ce lupta corp la corp este activă, armele lungi (sulițe, lance) obțin un bonus de +2 la atac. Așteptați sau schimbați de la atac la distanță la lupta corp la corp pentru a utiliza arma lungă: aceasta poate apoi efectua un atac gratuit împotriva unui inamic care se apropie."
+        "Când arma de luptă corp la corp este activă, armele cu coadă lungă primesc +2 la atac. Așteaptă o tură sau treci de la arma de distanță la cea de luptă corp la corp ca să pregătești arma cu coadă lungă. Vei putea ataca gratuit un inamic care înaintează în raza ei."
       ],
       "source_sha256": "0d2e48e1c8d0275541ff206ec2588da7866f7d82cd9e7187c51eb94b16bd6ebb"
     },
@@ -1021,14 +1021,14 @@
     "ability.7.preview": {
       "title": "Străpungere (Impale)",
       "steps": [
-        "Cu un armă lungă sau o sabie mare, un atac în apropiere poate lovi și un al doilea inamic, aflat direct în spatele primului. Plasați inamicii într-o linie pentru a profita de raza de acțiune."
+        "Cu o armă cu coadă lungă sau o sabie mare, o lovitură corp la corp poate atinge și un al doilea inamic aflat chiar în spatele primului. Poziționează-te astfel încât inamicii să fie în linie."
       ],
       "source_sha256": "75de641144f400737818f200e5d121ef5ee380bada19474e2b5e4b23afd1047e"
     },
     "ability.8.preview": {
       "title": "Subtilitate (Subtlety)",
       "steps": [
-        "Reducează intervalul de bază pentru loviturile critice în luptă cu 2, utilizând un armă de luptă cu o singură mână care îndeplinește cerințele, cu mâna dreaptă goală. Un scut previne acest beneficiu. Combinat cu „Grație”, o armă de 3 livre necesită marje de 6 și 12 pentru un și două aruncări suplimentare. Anumite trăsături sau obiecte speciale extind regulile pentru armele eligibile."
+        "Cu o armă potrivită de o mână și mâna secundară liberă, intervalul de bază pentru loviturile critice corp la corp scade cu 2. Un scut împiedică acest bonus. Dacă ai și Finețe, o armă de 3 lb cere o marjă de 6 pentru un zar suplimentar și de 12 pentru două. Anumite trăsături sau obiecte îți permit să folosești aptitudinea și cu alte arme."
       ],
       "source_sha256": "a14a80aae03b0767f34724fc757eca0aab60405bcfcc13f965c164c76864e0a8"
     },
@@ -1042,21 +1042,21 @@
     "ability.10.preview": {
       "title": "Zonă de control (Zone of Control)",
       "steps": [
-        "Dacă nu ați mutat în timpul turei anterioare, puteți efectua un atac gratuit împotriva unui inamic aflat între două pătrate adiacente. Menținerea poziției vă permite să amenințați mișcarea inamicului în jurul vostru."
+        "Dacă ai rămas pe loc în tura precedentă, poți ataca gratuit un inamic care trece de pe o căsuță de lângă tine pe alta, tot lângă tine. Menținându-ți poziția, poți lovi inamicii care îți dau ocol."
       ],
       "source_sha256": "dff48e40ac60e1150f25692f736130ee93b6665017d121159c5e75960f7cc22f"
     },
     "ability.11.preview": {
       "title": "Lovitură zdrobitoare (Smite)",
       "steps": [
-        "Cu o armă de luptă de două mâini, primul atac de luptă calificat produce daune maxime, inclusiv daunele suplimentare indicate de zarul. În acest caz, pierdeți un tur pentru a vă recupera, chiar dacă atacul nu a avut succes. Protecția reduce în continuare daunele."
+        "Cu o armă de două mâini, prima lovitură a unui atac corp la corp eligibil obține valoarea maximă pe toate zarurile de daune, inclusiv cele suplimentare. După atac pierzi o tură pentru a-ți reveni, chiar dacă ai ratat. Protecția țintei reduce daunele ca de obicei."
       ],
       "source_sha256": "4269630fb2eae63e917cdd1e5491a3c0c7e04d01565b9a110cb07ebe16da94da"
     },
     "ability.12.preview": {
       "title": "Luptă cu două arme (Two Weapon Fighting)",
       "steps": [
-        "Echipază-ți o armă cu o singură mână în mâna non-dominantă pentru a obține un atac suplimentar. Atacul cu mâna non-dominantă folosește -3 de Forță și Dexteritate. Verifică configurația rezultată a armei și scutului înainte de a o echipa."
+        "Echipează o armă de o mână în mâna secundară ca să primești un atac suplimentar. Pentru acel atac ai -3 la forță și la dexteritate. Verifică ce arme și ce scut vei putea folosi înainte să confirmi."
       ],
       "source_sha256": "42b08bc8c463ceff2f170b80ed9a99e47c6ce39411e5f08de7048caea6a95885"
     },
@@ -1077,7 +1077,7 @@
     "ability.15.preview": {
       "title": "Străjer (Warden)",
       "steps": [
-        "Gardianul adaugă jumătate din diferența dintre abilitățile tale de luptă corp la corp și arcaserie la arcaserie, rotunjind rezultatul în jos. De asemenea, dacă abilitatea de versatilitate este activă, Gardianul adaugă un sfert din abilitatea ta de luptă corp la corp, rotunjind rezultatul în sus. Bonusurile echipamentului și ale atributelor nu sunt incluse în acest calcul.",
+        "Dacă ai investit mai mult în lupta corp la corp decât în tirul cu arcul, Străjer îți mărește tirul cu arcul cu jumătate din diferență, rotunjită în jos. Dacă ai activă și Versatilitatea, bonusul este în schimb o treime din punctele investite în lupta corp la corp, rotunjită în sus. Bonusurile de la atribute și echipament nu intră în calcul.",
         "Prima schimbare de armă activă, efectuată înainte de următoarea acțiune, este gratuită, de la arme de corp la arcul. Cu abilitatea \"Aruncare\", poate schimba și între arme de corp și aruncare, sau între diferite arme de corp. Cu abilitatea \"Versatilitate\", poate schimba și între diferite arme de corp, sau între arcuri."
       ],
       "source_sha256": "5dd794eb47016cb523d154c563c53e7a00e660970b2d27e97bff8dc4ab882fc9"
@@ -1085,21 +1085,21 @@
     "ability.16.preview": {
       "title": "Aruncare puternică (Power Throw)",
       "steps": [
-        "După ce ați petrecut un tur pregătind arma de luptă sau așteptând, aruncați o suliță sau un topor de mână la un adversar aflat în apropiere, în timp ce atacați în luptă corp la corp. Aruncați separat fiecare atac împotriva eschivei, apoi combinați daunele cauzate de atacurile reușite, iar apoi aruncați o dată pentru apărare. Arma de luptă corp la corp rămâne activă."
+        "După o tură în care ai așteptat sau ai pregătit arma de luptă corp la corp, poți arunca o suliță sau o secure din harnașament asupra unui inamic alăturat în același timp cu lovitura corp la corp. Fiecare atac se verifică separat împotriva eschivei. Se adună daunele atacurilor care au nimerit, apoi se aruncă o singură dată zarurile de protecție. Arma corp la corp rămâne activă."
       ],
       "source_sha256": "2cd156e91f84b252398b21033159276f973303929066473e826d737625964b0c"
     },
     "ability.20.preview": {
       "title": "Punere pe fugă (Rout)",
       "steps": [
-        "Obține +5 Dexteritate atunci când tragi asupra inamicilor care fug. Verifică-ți jurământul: \"Jurământul de Curaj\" interzice vătămarea lor."
+        "Primești +5 la dexteritate atunci când tragi în inamici care fug. Verifică mai întâi ce ai jurat: Jurământul inimii viteze îți interzice să îi rănești."
       ],
       "source_sha256": "438830917961ee81cae51b71f3e97927999d2715d2f4c6272fe08d72313c482f"
     },
     "ability.21.preview": {
       "title": "Confecționarea săgeților (Fletchery)",
       "steps": [
-        "\"Fletchery\" poate îmbunătăți săgețile cu +3, păstrând proprietățile speciale, consumând o acțiune per săgeată. De asemenea, puteți transforma 3 săgeți dintr-un tor, sau 6 dintr-un baston al unui vrăjitor, consumând sursa. În mod personal, învățarea \"Fletchery\" reduce volumul rucsacului cu 20% pentru săgețile rămase."
+        "Poți îmbunătăți săgețile până la +3, păstrându-le proprietățile speciale. Ai nevoie de o tură pentru fiecare săgeată. Poți ciopli 3 săgeți dintr-o torță sau 6 dintr-un toiag, consumând obiectul respectiv. Dacă înveți tu aptitudinea, săgețile din rucsac ocupă cu 20% mai puțin volum."
       ],
       "source_sha256": "3a4a3f0d5bc5b732e9ca454c67b14183bffc2dc05af2c53f624c4c59ad818ce5"
     },
@@ -1127,7 +1127,7 @@
     "ability.25.preview": {
       "title": "Versatilitate (Versatility)",
       "steps": [
-        "Versatilitatea adaugă jumătate din diferența dintre abilitățile tale de Arcaserie și Luptă, rotunjită în jos, atunci când Arcaseria este mai mare. De asemenea, atunci când Gardianul este activ, adaugă un sfert din abilitatea ta de Arcaserie, rotunjită în sus. Bonusurile echipamentului și ale atributelor nu sunt incluse în acest calcul.",
+        "Dacă ai investit mai mult în tirul cu arcul decât în lupta corp la corp, Versatilitatea îți mărește lupta corp la corp cu jumătate din diferență, rotunjită în jos. Dacă ai activă și aptitudinea Străjer, bonusul este în schimb o treime din punctele investite în tirul cu arcul, rotunjită în sus. Bonusurile de la atribute și echipament nu intră în calcul.",
         "Prima schimbare de armă activă, înainte de următoarea acțiune, este gratuită, de la arcul la arme de luptă apropiate. Cu arcul, poate schimba și între arcul și aruncarea, sau între arcuri. Cu \"Warden\", poate schimba și între arme de luptă apropiate sau între arcuri."
       ],
       "source_sha256": "e86a5fd3d00b207a3434b54efdf0dfe1f471e6231df621a59599e8abe61bacb7"
@@ -1135,7 +1135,7 @@
     "ability.26.preview": {
       "title": "Săgeată schiloditoare (Crippling Shot)",
       "steps": [
-        "O săgeată critică poate încetini ținta, iar nivelul critic este comparat cu Vocea (Will) a acesteia. Un atac critic nu garantează efectul de încetinire."
+        "O lovitură critică de săgeată poate încetini ținta. Nivelul loviturii critice se verifică împotriva voinței țintei, care poate rezista încetinirii."
       ],
       "source_sha256": "49d949257e1818b8b6ecc363d44a12c23ee0cc9b90036880fc1baad80a4aab6f"
     },
@@ -1156,7 +1156,7 @@
     "ability.29.preview": {
       "title": "Tir din mers (Skirmishing)",
       "steps": [
-        "După ce ai efectuat acțiunea din turul anterior, folosirea unei arcuri costă jumătate de tur, dacă porți doar armură ușoară. Schimbarea primei arme active înainte de următoarea acțiune este gratuită, atunci când schimbi între arcuri."
+        "Dacă te-ai deplasat în tura precedentă și porți doar armură ușoară, tragerea cu arcul durează o jumătate de tură. Prima schimbare a armei active înainte de următoarea acțiune este gratuită dacă treci de la un arc la altul."
       ],
       "source_sha256": "b083273628ee1987646855972f460e37eb1db2037ccb75eecd939f45cfd8f1b4"
     },
@@ -1247,14 +1247,14 @@
     "ability.61.preview": {
       "title": "Asasinat (Assassination)",
       "steps": [
-        "Obține un bonus de atac în luptă egal cu valoarea ta de Stealth împotriva inamicilor care nu sunt atenți, sau împotriva inamicilor care sunt în prezent păcăliți de „Cântecul de Ascundere”."
+        "Primești la atacurile corp la corp un bonus egal cu furișarea ta împotriva inamicilor nealertați sau a celor pe care îi păcălește în acel moment Cântecul deghizării."
       ],
       "source_sha256": "97a8096a910f3f931fae48805e3388002a738b711f875ef0bebeaf9cd719bf68"
     },
     "ability.62.preview": {
       "title": "Lovitură crudă (Cruel Blow)",
       "steps": [
-        "Loviturile puternice în luptă pot confunda inamicii, fiind verificate în funcție de Vocea lor. Dacă echipamentul oferă \"Lovitură Cruelă\", purtarea acestuia accelerează, de asemenea, temporizatorul minim de \"Apel Profund\", chiar și atunci când abilitatea este dezactivată."
+        "Loviturile critice corp la corp pot provoca o stare de confuzie. Ținta se apără cu voința. Dacă ai primit Lovitură crudă de la un obiect, purtarea lui grăbește creșterea adâncimii minime la fel de mult ca Deep Call, chiar dacă dezactivezi aptitudinea."
       ],
       "source_sha256": "01ac507301606cf32743ae9655433f85a5e5f6a887069a17147cedf1c5c109c9"
     },
@@ -1289,7 +1289,7 @@
     "ability.80.preview": {
       "title": "Învățare rapidă (Quick Study)",
       "steps": [
-        "Aflați abilități avansate fără a respecta cerințele de abilități obișnuite. Cerințele lor de abilități și XP rămân valabile. De asemenea, obțineți un bonus modest la identificarea obiectelor."
+        "Poți învăța aptitudini avansate fără să cunoști aptitudinile care le preced de obicei. Ai în continuare nevoie de nivelul cerut al deprinderii și de experiența necesară. Primești și un mic bonus la identificarea obiectelor."
       ],
       "source_sha256": "7e1e0ad241a50d11429a5fb79505491d75b1155994a742d36ea2452dc4ce5ea5"
     },
@@ -1317,7 +1317,7 @@
     "ability.84.preview": {
       "title": "Alchimie (Alchemy)",
       "steps": [
-        "Identificarea automată a ierburilor, poțiunilor, baghetelor vrăjilor și corniilor. În timp ce este bolnav, „Pietra Cunoașterii de Sine” indică numele bolii și ierburile care o pot trata. Poțiunile cu efecte de aruncare pot fi aruncate rapid, lovind pătratul de impact și toate pătratele adiacente. +50% raza de acțiune pentru „Pietrele de Revelație”, inamici și comori."
+        "Identifici automat plantele, poțiunile, toiegele și cornurile. Dacă ești bolnav, o nestemată a cunoașterii de sine îți arată numele bolii și planta care o vindecă. Poți arunca rapid poțiunile care au efect la impact. Ele stropesc căsuța lovită și toate căsuțele din jur. Raza nestematelor care dezvăluie terenul, inamicii sau comorile crește cu 50%."
       ],
       "source_sha256": "6233a61c84c16220f39efc944a19cb897281e867d7f155ce3c90437d55f3b235"
     },
@@ -1331,7 +1331,7 @@
     "ability.86.preview": {
       "title": "Viclenie (Outwit)",
       "steps": [
-        "Când un inamic provoacă un atac critic, tu contrazici percepția sa. Dacă reușești, elimini zarurile suplimentare care indică daunele critice; atacul obișnuit tot poate provoca răni."
+        "Când un inamic obține o lovitură critică, percepția ta se măsoară cu a lui. Dacă reușești, elimini zarurile suplimentare ale loviturii critice. Daunele normale ale loviturii te pot răni în continuare."
       ],
       "source_sha256": "cdf4f855418fdee55b18b0092c035a0502a8d3464f700362c1a0a32e8cd8a803"
     },
@@ -1352,28 +1352,28 @@
     "ability.89.preview": {
       "title": "Grație (Grace)",
       "steps": [
-        "Oferă +1 la grație și mărește capacitatea centurii cu 6,0 qt. Poți ține mai mult echipament la îndemână."
+        "Primești +1 la grație și încă 6,0 qt de spațiu în harnașament, unde poți ține mai mult echipament pregătit."
       ],
       "source_sha256": "c812128d264feb733c88504217f32cec4127b059e3b494ebeca13b03e1da2104"
     },
     "ability.90.preview": {
       "title": "Modificarea capcanelor (Rewire Traps)",
       "steps": [
-        "Când dezactivezi o capcană potrivită, în schimb, o repari: aceasta nu mai reprezintă o amenințare pentru tine, iar monștrii care o traversează pot declanșa funcționarea modificată. Cu cât ai un avantaj mai mare în încercare, cu atât este mai greu pentru inamici să observe sau să anuleze modificarea."
+        "Când reușești să dezamorsezi o capcană potrivită, îi modifici mecanismul. Devine inofensivă pentru tine, iar monștrii care trec peste ea o pot declanșa. Cu cât marja ta de reușită este mai mare, cu atât le este mai greu să observe sau să anuleze modificarea."
       ],
       "source_sha256": "d2d212c13d156a22748cc1a0969615835c449d76e813b9e5431d88dce0073c28"
     },
     "ability.100.preview": {
       "title": "Înlăturarea blestemelor (Curse Breaking)",
       "steps": [
-        "Anulează efectele blestemelor asupra obiectelor obișnuite atunci când le scoți din inventar. Obține un bonus semnificativ de identificare, în special pentru obiectele blestemate. Pietrele de Sfânt pot, de asemenea, anula proprietățile speciale blestemate, dacă sunt calificate."
+        "Poți rupe blestemele obișnuite ale obiectelor când le dezechipezi. Primești un bonus important la identificare, mai ales pentru obiectele blestemate. Nestematele de sfințenie pot înlătura și anumite proprietăți speciale purtătoare de blestem."
       ],
       "source_sha256": "344ae6b5aa841ef6d9138e785ec0722b46710f0cbb5a244360a2952bb8c496c3"
     },
     "ability.101.preview": {
       "title": "Canalizare (Channeling)",
       "steps": [
-        "Identificarea automată a bastonilor și corniilor magilor. Folosiți funcția \"Channel\" pentru a transfera energia de la un baston compatibil, aflat pe podea, către un baston purtat de un mag. Cornii costă 10 puncte de Voce, în loc de 20, iar \"Gems of Recharging\" restabilesc de două ori energia normală."
+        "Identifici automat toiegele și cornurile. Cu Channel poți transfera încărcături dintr-un toiag compatibil de pe podea într-unul pe care îl porți. Cornurile consumă 10 puncte de voce în loc de 20, iar nestematele de reîncărcare refac de două ori mai multe încărcături."
       ],
       "source_sha256": "3fe56db31f7d409661d9818766e2f8cbbd944fec43f1830031c11ad5b8a3cf7c"
     },
@@ -1401,7 +1401,7 @@
     "ability.105.preview": {
       "title": "Neînduplecat (Indomitable)",
       "steps": [
-        "Oferă rezistență la frică, confuzie, amețire și halucinații. Foamea crește cu o treime din viteza obișnuită."
+        "Primești rezistență la frică, confuzie, amețire și halucinații. Ți se face foame de trei ori mai lent."
       ],
       "source_sha256": "bdeb1b85c3b630cfe5d58b581baf68df051db7a5ceedb04ee345230b99bbe2e5"
     },
@@ -1499,14 +1499,14 @@
     "ability.128.preview": {
       "title": "Măiestria aliajelor (Alloy mastery)",
       "steps": [
-        "Creați echipament din mithril sau oțel cosmic, sau aliați arme și armuri potrivite cu aceste metale. Aliozarea nu adaugă costuri suplimentare, dar totuși necesită materialul."
+        "Poți făuri echipament din mithril sau fier stelar. Poți folosi aceste metale și pentru a crea aliaje la armele și armurile potrivite. Alierea nu mărește dificultatea, dar ai nevoie de material."
       ],
       "source_sha256": "e73f37484b771f0db93bd7c2547e8101d7e0061308d484bf89db9bcef085ae48"
     },
     "ability.129.preview": {
       "title": "Refăurire (Reforging)",
       "steps": [
-        "La un atelier, reparați obiecte deteriorate sau adăugați un prefix lipsă unui obiect găsit. Dificultatea refolosirii este de 1,5 ori mai mare decât creșterea dificultății. Comparați rezultatul și costurile înainte de a vă angaja."
+        "La o forjă poți repara obiecte deteriorate sau poți adăuga un prefix unui obiect găsit căruia îi lipsește. Dificultatea refăuririi este egală cu 1,5 înmulțit cu creșterea de dificultate. Verifică rezultatul și costurile înainte să începi."
       ],
       "source_sha256": "a6cc7d644a7e131068374a871adaedf99d820f59a8588295e857dd918722bbc3"
     },
@@ -1541,7 +1541,7 @@
     "ability.144.preview": {
       "title": "Cântecul tăcerii (Song of Silence)",
       "steps": [
-        "Reducez zgomotul, făcând mai dificil pentru inamici să audă sau să cheme aliați. Inamicii pot totuși să te vadă, așa că acoperirea și distanța rămân utile."
+        "Cântecul înăbușă zgomotele. Inamicilor le este mai greu să te audă sau să-și cheme aliații. Tot te pot vedea, așa că distanța și adăpostul contează."
       ],
       "source_sha256": "e37eabba77d6dc589f817bdaea7f0af341b3f299b08c86a0aac7d0699086a3b0"
     },
@@ -1555,7 +1555,7 @@
     "ability.146.preview": {
       "title": "Cântecul pragurilor (Song of Thresholds)",
       "steps": [
-        "„Ward” închide ușile, făcând mai dificilă trecerea inamicilor. „Stronger Song” întărește barierele; acestea nu sunt ziduri permanente."
+        "Întărești ușile închise prin cântec, iar inamicilor le este mai greu să treacă de ele. O valoare mai mare a deprinderii de cântec face barierele mai puternice, dar ele pot fi străpunse."
       ],
       "source_sha256": "fc55af1b8d0fac8f7fbc2fb1c8937eef9e979600fbef1542b6b51968cd3033f9"
     },
@@ -1569,21 +1569,21 @@
     "ability.148.preview": {
       "title": "Teme împletite (Woven Themes)",
       "steps": [
-        "Cântă o a doua melodie, ca o temă secundară, folosind jumătate din scorul tău de Voce. Ambele teme consumă Voce. Alege efecte care funcționează bine împreună și urmărește cantitatea de Voce rămasă."
+        "Poți cânta al doilea cântec ca temă secundară, folosind jumătate din valoarea deprinderii tale de cântec pentru efectul său. Ambele teme consumă puncte de voce. Alege efecte care se completează și urmărește câtă voce îți rămâne."
       ],
       "source_sha256": "07aa3e0eabb45fc92feb403b012ee549e01ed3e38e5ce10d2a9ab6b900fbba3f"
     },
     "ability.149.preview": {
       "title": "Cântecul măcelului (Song of Slaying)",
       "steps": [
-        "Un atac puternic în luptă îl ucide pe țintă, dacă viața acesteia este de cel mult de două ori mai mare decât cea a jucătorului. Acesta trebuie să fie un atac puternic; atacurile obișnuite nu declanșează acest efect."
+        "O lovitură critică în lupta corp la corp ucide ținta dacă punctele ei de viață rămase sunt cel mult dublul valorii tale efective la cântec. O lovitură obișnuită nu declanșează efectul."
       ],
       "source_sha256": "ec38d6c4fe2ef2ae8ccd79e5efa914047ae4a5f7a129df88fa38d5b71ec081c7"
     },
     "ability.150.preview": {
       "title": "Cântecul dezvăluirii (Song of Revealing)",
       "steps": [
-        "Folosește abilitatea „Song” o dată la fiecare tură pentru a detecta creaturile și obiectele din apropiere. Obiectele descoperite, inclusiv cele purtate și cele echipate, obțin un bonus de 1d5 la aruncarea de identificare."
+        "În fiecare tură faci probe de cântec pentru a dezvălui creaturi și obiecte din apropiere. Obiectele dezvăluite, inclusiv cele purtate sau echipate, primesc o aruncare suplimentară de 1d5 pentru identificare."
       ],
       "source_sha256": "6668546bdb7ce3dadeb4a3764caa78fc83df083a863947a5227acfa1bfb51965"
     },
@@ -1597,14 +1597,14 @@
     "ability.152.preview": {
       "title": "Cântecul statorniciei (Song of Staying)",
       "steps": [
-        "Obțineți Voință egală cu jumătate din Valoarea Muzicii și 2d2 de protecție împotriva tuturor daunelor. Trăsăturile speciale ale personajului pot îmbunătăți și mai mult Valoarea Muzicii."
+        "Primești un bonus la voință egal cu jumătate din valoarea ta efectivă la cântec și 2d2 protecție împotriva tuturor daunelor. Anumite trăsături ale personajului pot întări și mai mult cântecul."
       ],
       "source_sha256": "7618dcf4b45dcfc843da99564e65429305f7190034c3556789467f1757a7d06a"
     },
     "ability.153.preview": {
       "title": "Cântecul deghizării (Song of Disguise)",
       "steps": [
-        "Nu puteți începe \"Cântecul Mascării\" dacă un monstru non-pacifist, aflat în alertă, vă observă. Atacul dvs. anulează mascarada. În fiecare rundă, eficacitatea \"Cântecului\" + 5, împreună cu Voința dvs., se confruntă cu Voința și Percepția inamicului, cu penalități pentru observatori, creaturi care v-au descoperit deja și atacatori recenti. Distanța este un avantaj; un succes îl înșeală pe acel monstru pentru această rundă."
+        "Nu poți începe Cântecul deghizării cât timp te observă o creatură alertată care nu este pașnică. Deghizarea încetează când ataci. În fiecare rundă, valoarea efectivă la cântec + 5 + voința ta se măsoară cu voința + percepția inamicului. Observatorii, creaturile care au văzut deja prin deghizare și cele care te-au atacat recent îți îngreunează proba. Distanța te ajută. Dacă reușești, păcălești creatura pentru runda respectivă."
       ],
       "source_sha256": "ffcb20e82e8fd8719af2c62af53acf01f8b545a4221d2ddbd1ecb317ccd0502f"
     },
@@ -1639,14 +1639,14 @@
     "ability.158.preview": {
       "title": "Cântecul duelului (Song of Contest)",
       "steps": [
-        "„Contest” îi provoacă unui adversar eligibil să efectueze repetat aruncări de zaruri în opoziție. Învingerea reduce permanent valorile sale de „Voce”, „Stealth”, „Eschivă” și „Armură”. Înfrângerea epuizează aleatoriu una dintre atribute, reducându-i valoarea cu 1. Un duel final oprește cântecul și blochează cântatul pentru 10 runde; nu puteți repeta același duel final împotriva acelui adversar."
+        "Alegi un adversar eligibil pentru un duel cu probe repetate. Victoria îi reduce permanent voința, furișarea, eschiva și numărul zarurilor de armură. Dacă pierzi, unul dintre atributele tale, ales la întâmplare, scade cu 1. La încheierea duelului cântecul se oprește și nu poți cânta timp de 10 ture. Nu poți repeta același duel încheiat împotriva acelui adversar."
       ],
       "source_sha256": "9730351df8c4f42feec466ff1f50102621aed2a145802f88f4cc38d24cb784ac"
     },
     "ability.159.preview": {
       "title": "Cântec de jale (Song of Lament)",
       "steps": [
-        "\"Lament\" are concepute pentru a reduce permanent valoarea \"Voinței\", viața maximă și numărul de zaruri pentru daune al unui adversar eligibil. Finalizarea efectului consumă 1 punct de \"Grație\", chiar și în cazul succesului. După aceea, cântecul se termină și nu mai poți cânta același cântec împotriva acelui adversar timp de 10 ture; nu poți repeta aceeași luptă. Citește costul în \"Voi\" și \"Grație\" înainte de a te angaja."
+        "Cântecul de jale poate reduce permanent voința, viața maximă și numărul zarurilor de daune ale unei ținte eligibile. Când efectul se încheie, pierzi 1 punct de grație, chiar dacă ai reușit. Cântecul se oprește și nu poți cânta timp de 10 ture. Nu poți repeta duelul încheiat cu acea țintă. Înainte de a începe, verifică ținta și costul actual în puncte de voce."
       ],
       "source_sha256": "3d0ee17313e137b1f742a3204deec90180913f2a679ab71f63e27d73d8291989"
     },
@@ -1660,7 +1660,7 @@
     "ability.161.preview": {
       "title": "Fierăria lui Aulë (Aulë's Forge)",
       "steps": [
-        "Turnul lui Aulë îmbunătățește funcționalitatea \"Masterpiece\". Dincolo de limita normală de forjare, cheltuiește 1 punct de forjare de bază pentru fiecare 2 puncte de dificultate suplimentare, rotunjind costul. Poți atinge de două ori limita normală de forjare. Această recompensă pentru această misiune înlocuiește regula \"Masterpiece\", care este mai puțin eficientă."
+        "Fierăria lui Aulë îmbunătățește aptitudinea Capodoperă. Pentru fiecare 2 puncte de dificultate peste limita ta normală cheltuiești definitiv 1 punct din valoarea de bază a fierăriei, rotunjind costul în sus. Poți depăși limita normală cu cel mult dublul valorii de bază a fierăriei. Această recompensă de misiune înlocuiește regula obișnuită a aptitudinii Capodoperă."
       ],
       "source_sha256": "73e041c63c309b895644d6db95b2b25a9023c9653a4b62f00e2410f0900dcef0"
     },
@@ -1688,7 +1688,7 @@
     "ability.165.preview": {
       "title": "Darul milei al Niennei (Nienna's Gift of Mercy)",
       "steps": [
-        "„Darul lui Nienna” oferă până la +10 de bonusuri de ascunziș, în funcție de numărul de creaturi non-unice pe care le-ai salvat. De exemplu, dacă salvezi jumătate, obții +5. Rezultatul este rotunjit în sus; înainte de a vedea oricare, bonusul este 0. Verifică numărul curent și bonusul în ecranul personajului."
+        "Darul Niennei îți oferă până la +10 la furișare în funcție de proporția creaturilor neunice întâlnite pe care le-ai cruțat. Dacă ai cruțat jumătate, primești +5. Rezultatul se rotunjește în sus. Până întâlnești prima creatură eligibilă, bonusul este 0. Poți vedea numărul creaturilor și bonusul actual în fișa personajului."
       ],
       "source_sha256": "e0dc7fc90a3c85cfd31ec40b61562f4e8df03dc976710860c6af30bb6ef7d337"
     },
@@ -1716,7 +1716,7 @@
     "ability.169.preview": {
       "title": "Jurământul luminii (Oath of Light)",
       "steps": [
-        "„Jurământul Luminii” oferă un plus de +1 la raza de acțiune, atâta timp cât este valabil. Folosirea obiectelor cu proprietăți de „Întuneric” sau „Lipsă de Lumină” îl anulează. Verificați proprietățile cunoscute ale obiectelor înainte de a schimba echipamentul."
+        "Cât timp respecți Jurământul luminii, raza ta de iluminare crește cu 1. Încalci jurământul dacă echipezi un obiect cu proprietatea Darkness sau Unlight. Verifică proprietățile cunoscute ale obiectelor înainte să-ți schimbi echipamentul."
       ],
       "source_sha256": "c9a4d7d659127b2dff89039fbc41d6eda2359b1ca81d90ef52667d679cecae3b"
     },
@@ -2191,7 +2191,7 @@
       "source_sha256": "8974729290a30ea7a5409814e1c97c18d890900ca0a0fa268c8d6c3ef4103ac4"
     },
     "effect.195": {
-      "title": "Sfintenie — efect cunoscut",
+      "title": "Sfințenie — efect cunoscut",
       "steps": [
         "Elimină un obiect ales din echipament, rucsac sau de pe podea, eliminând blestemele, dacă regulile permit. Eliminarea blestemelor permite, de asemenea, eliminarea blestemelor aplicate obiectelor eligibile. Selectați un țintă real înainte de a acționa."
       ],
@@ -2254,7 +2254,7 @@
       "source_sha256": "2f758a07b2b4ce2cfd82bc811244fd4730053ff1563ecc372e78d1264e4fbed8"
     },
     "effect.204": {
-      "title": "Dezamăgire — efect cunoscut",
+      "title": "Spaimă — efect cunoscut",
       "steps": [
         "Încercați să induceți confuzie la monștrii aflați în raza vizuală. Verificați ce s-a întâmplat de fapt înainte de a vă baza pe ideea că un monstru a fost confuz."
       ],
@@ -2268,7 +2268,7 @@
       "source_sha256": "db7ddfb309237c6d514aa04dd4d2b14acac8ceb5c9d1ff4f86436b68cf2b0565"
     },
     "effect.210": {
-      "title": "Apelarea — efect cunoscut",
+      "title": "Invocare — efect cunoscut",
       "steps": [
         "Vă permite să chemați 1 până la 4 creaturi la poalele nivelului, unde este posibilă plasarea lor. Acest lucru poate adăuga inamici periculoși pe traseul vostru de evadare. Folosiți această funcție doar atunci când doriți să chemați creaturile."
       ],
@@ -2277,7 +2277,7 @@
     "effect.211": {
       "title": "Umbre — efect cunoscut",
       "steps": [
-        "Reducează o zonă de 7 pătrate și camera curentă. Pentru verificările de ascunziș din această rundă, adaugă-ți Vocea la verificarea de ascunziș. Întunericul schimbă, de asemenea, ceea ce poți vedea."
+        "Reduce o zonă de 7 pătrate și camera curentă. Pentru verificările de ascunziș din această rundă, adaugă-ți Vocea la verificarea de ascunziș. Întunericul schimbă, de asemenea, ceea ce poți vedea."
       ],
       "source_sha256": "5556e036093c4c86a10a9401e1edccdb906d0c81021e7efbe53098c03d4fa3e6"
     },
@@ -2303,14 +2303,14 @@
       "source_sha256": "1faf5ef561a9c7eddf63e4a0a16e19da5aa3fd82398f2bdde7f2b44c586357d6"
     },
     "effect.243": {
-      "title": "Utilizarea atacurilor — efect cunoscut",
+      "title": "Sfărâmare — efect cunoscut",
       "steps": [
         "Poate distruge piatra. Poate fi țintit în orice direcție, inclusiv în sus sau în jos, folosind opțiunile normale de țintire. Inspectați zona și evaluați costul înainte de a utiliza un efect distructiv."
       ],
       "source_sha256": "038c4ebb15fe0d6896a9117c0c332939692f889ad6c2fecc83718fcfaeb23bba"
     },
     "effect.250": {
-      "title": "Atenție — efect cunoscut",
+      "title": "Avertizare — efect cunoscut",
       "steps": [
         "Emite un sunet puternic de alarmă și provoacă inamicii din apropiere. Atrage atenția, deci nu o folosiți doar pentru că un alt sunet ar fi fost util."
       ],
@@ -2324,7 +2324,7 @@
       "source_sha256": "bec68ce42cf64555ac77518fc192aa6bf1c9749192e762c3b52be0019701fb95"
     },
     "effect.315": {
-      "title": "Băutură Orc — efect cunoscut",
+      "title": "Tărie orcească — efect cunoscut",
       "steps": [
         "Înlătură frica și redă 6 puncte de viață plus 8% din viața maximă, procentul rotunjit în jos. Poate adăuga 2d4 puncte de amețire, în funcție de protecție. Echipamentul medical poate crește vindecarea. Ia în calcul riscul chiar dacă ai nevoie de vindecare."
       ],
@@ -2359,21 +2359,21 @@
       "source_sha256": "6d943cd4adcc3508197cf6be4cc845905901c01f3990f2d532dd65b8b6fa1672"
     },
     "effect.320": {
-      "title": "Viziune autentică — efect cunoscut",
+      "title": "Vedere adevărată — efect cunoscut",
       "steps": [
         "Vindecă orbirea și halucinațiile. Timp de 10d4 ture oferă rezistență la ambele și te ajută să detectezi creaturi invizibile."
       ],
       "source_sha256": "4881ab7812cf7e30cfa377f1af734707b8ce0c9fba2a3fd271de606b06905837"
     },
     "effect.321": {
-      "title": "Substanțe vindecătoare — efect cunoscut",
+      "title": "Antidot — efect cunoscut",
       "steps": [
         "Elimină otrăvirea curentă. Nu restabilește viața pierdută din cauza otrăvirii."
       ],
       "source_sha256": "eade920af6d51e854b99a9d9c5c8ec622881d4f3bf8122cd07f37e3b37cde79d"
     },
     "effect.322": {
-      "title": "Agilitate — efect cunoscut",
+      "title": "Iuțeală — efect cunoscut",
       "steps": [
         "Oferă +1 la viteză timp de 10d4 ture. Poate compensa încetinirea fără să înlăture starea în sine."
       ],
@@ -2443,37 +2443,37 @@
       "source_sha256": "dae41e7a7ac192ec551d67748ef33af26a8901123afefa10a3d00ca0b0b5f05c"
     },
     "effect.348": {
-      "title": "Neajutorare — efect cunoscut",
+      "title": "Stângăcie — efect cunoscut",
       "steps": [
-        "Reducează Dexteritatea cu 1. Aceasta este o reducere a atributului, nu un bonus temporar care dispare."
+        "Reduce Dexteritatea cu 1. Aceasta este o reducere a atributului, nu un bonus temporar care dispare."
       ],
       "source_sha256": "c93dd419d6ff793212ec70420ed3f3e20ddb600f9ab1afe142ccc5e4f9692568"
     },
     "effect.350": {
       "title": "Deconectare — efect cunoscut",
       "steps": [
-        "Reducează Grația cu 1. Un efect de restaurare sau unul cu efect similar, echivalent, restabilește Grația."
+        "Reduce Grația cu 1. Un efect de restaurare sau unul cu efect similar, echivalent, restabilește Grația."
       ],
       "source_sha256": "52f2fbb538b3346caf3603db555eedc54a2175ca1168b419873694660af67467"
     },
     "effect.380": {
       "title": "Furie — efect cunoscut",
       "steps": [
-        "Oferă furie timp de 10d4 runde: +1 Forță/Constituție, -1 Dexteritate/Grație, un atac special în luptă și rezistență la frică. Furia limitează percepția și ascunderea. De asemenea, oferă hrănire cu plante obișnuite. Dacă aceasta este tratamentul pentru boala dumneavoastră actuală, aceasta vindecă boala și restabilește penalitățile, în loc să activeze furia sau hrănirea; altfel, are efectul normal."
+        "Intri în furie pentru 10d4 ture: +1 la forță și constituție, -1 la dexteritate și grație, un atac special corp la corp și rezistență la frică. Furia limitează ce poți observa și îți restrânge furișarea. Planta oferă și cantitatea obișnuită de hrană. Dacă această plantă este leacul bolii tale, vindecă boala și îți redă punctele de atribut pierdute din cauza ei. În acest caz nu își produce efectul obișnuit și nu te hrănește."
       ],
       "source_sha256": "616ca8499f908903e134e6fe9d3fabd14444e1c12310d4b4304065a1318810e1"
     },
     "effect.381": {
-      "title": "Resurse — efect cunoscut",
+      "title": "Sățietate — efect cunoscut",
       "steps": [
-        "Oferă aproximativ 2.000 porții de hrană. Rata de consum reală poate varia în funcție de modificatorii actuali. Dacă acesta este tratamentul pentru boala dumneavoastră, acesta o va vindeca și va restabili penalitățile, în loc să aplice efectul sau hrana normală; altfel, efectul său normal se aplică."
+        "Te hrănește pentru aproximativ 2.000 de ture obișnuite. Ritmul în care consumi hrana depinde de modificatorii actuali. Dacă această plantă este leacul bolii tale, vindecă boala și îți redă punctele de atribut pierdute din cauza ei. În acest caz nu își produce efectul obișnuit și nu te hrănește."
       ],
       "source_sha256": "a8621b751b5fbc4f405a9d2e4c7136d8e04f47ca873476c7cfaf23ea86be66a2"
     },
     "effect.382": {
       "title": "Teroare — efect cunoscut",
       "steps": [
-        "Dacă protecția împotriva fricii nu previne efectul, provoacă frică timp de 10d4 runde și reduce viteza timp de 5d4 runde. Prevenirea fricii previne, de asemenea, acest beneficiu al vitezei. Oferă hrănire normală cu plante. Dacă aceasta este tratamentul pentru boala dumneavoastră actuală, aceasta vindecă boala și restabilește penalitățile, în loc să aplice efectul sau hrănirea normală; altfel, efectul său normal se aplică."
+        "Dacă protecția împotriva fricii nu te apără, simți frică timp de 10d4 ture și te miști mai repede timp de 5d4 ture. Dacă frica este împiedicată, nu primești nici bonusul de viteză. Planta oferă și cantitatea obișnuită de hrană. Dacă această plantă este leacul bolii tale, vindecă boala și îți redă punctele de atribut pierdute din cauza ei. În acest caz nu își produce efectul obișnuit și nu te hrănește."
       ],
       "source_sha256": "5b77dbfdeeef100f3f8328f96e08cdb72200ab12abb9767e2154fa08863e8094"
     },
@@ -2487,14 +2487,14 @@
     "effect.384": {
       "title": "Restaurare — efect cunoscut",
       "steps": [
-        "Restabilește toate atributele, cu până la 3 puncte pierdute. Oferă, de asemenea, hrănire obișnuită cu plante. Nu elimină penalizările cauzate de echipament nepotrivit. Dacă acesta este tratamentul pentru boala dumneavoastră, acesta o tratează și restabilește penalizările, în loc să aplice efectul sau hrănirea normală; altfel, efectul său normal se aplică."
+        "Reface până la 3 puncte pierdute din fiecare atribut și oferă cantitatea obișnuită de hrană. Penalizările date de echipament rămân. Dacă această plantă este leacul bolii tale, vindecă boala și îți redă punctele de atribut pierdute din cauza ei. În acest caz nu își produce efectul obișnuit și nu te hrănește."
       ],
       "source_sha256": "e3a464206778421f8b685812d6e57e4173f32bd6c783f1b1044c41b29e41b990"
     },
     "effect.385": {
       "title": "Goliciune — efect cunoscut",
       "steps": [
-        "Reducează aportul de hrană cu aproximativ 1.000 ture normale, ceea ce poate agrava senzația de foame atunci când are efectul său normal. Dacă acest lucru este tratamentul pentru boala dumneavoastră, acesta o tratează și restabilește penalitățile, în loc să aplice efectul normal sau aportul de hrană; altfel, efectul său normal se aplică."
+        "Îți scade rezerva de hrană cu echivalentul a aproximativ 1.000 de ture obișnuite, ceea ce poate agrava foamea. Dacă această plantă este leacul bolii tale, vindecă boala și îți redă punctele de atribut pierdute din cauza ei. În acest caz nu își produce efectul obișnuit și nu te hrănește."
       ],
       "source_sha256": "5ce314f56c8b5bbb09224dbe1ae73c4448bb2b21642b42de198d56235d58eba6"
     },
@@ -2506,7 +2506,7 @@
       "source_sha256": "d4af33310edc714d7dc791d722681897d60c44f96a224c7f31efc4adf27f6152"
     },
     "effect.387": {
-      "title": "Captivare — efect cunoscut",
+      "title": "Transă — efect cunoscut",
       "steps": [
         "Te poate pune în transă timp de 10d4 ture. În transă nu poți alege acțiuni obișnuite. Păstrează planta dacă nu vrei să accepți riscul. Dacă este leacul bolii actuale, vindecă boala și îi înlătură penalizările în loc să ofere efectul și hrana obișnuite. Altfel acționează normal."
       ],
@@ -2515,47 +2515,47 @@
     "effect.388": {
       "title": "Slăbiciune — efect cunoscut",
       "steps": [
-        "Reducează forța cu 1 și oferă hrănire cu plante obișnuite. Hrănirea nu anulează dezavantajul său. Dacă aceasta este tratamentul pentru boala dumneavoastră actuală, aceasta vindecă boala și restabilește penalitățile, în loc să aplice efectul sau hrănirea normală; altfel, efectul său normal se aplică."
+        "Îți scade forța cu 1 punct. Planta te hrănește ca de obicei, dar hrana nu compensează pierderea de forță. Dacă această plantă este leacul bolii tale, vindecă boala și îți redă punctele de atribut pierdute din cauza ei. În acest caz nu își produce efectul obișnuit și nu te hrănește."
       ],
       "source_sha256": "990fd3d5b050fd0a4ae48e266ac26a598e4ac98b8ebbb5419ff79a90cd2e797b"
     },
     "effect.389": {
       "title": "Boală — efect cunoscut",
       "steps": [
-        "Efectul său normal este de a încerca să infecteze un consumator sănătos cu boală: -1 Constituție la infecție, apoi -1 la un atribut aleatoriu la fiecare 150 ture ale jucătorului (300 cu \"Rezistență\") până la vindecare. Odihna nu o vindecă. Un \"Herb of Healing\" (Plantă de Vindecare) sau o poțiune de Vindecare sau \"Miruvor\" vindecă orice boală. Vindecarea anulează penalitățile cauzate de boală. Oferă hrănire obișnuită cu plante. Dacă acest lucru este tratamentul pentru boala dumneavoastră actuală, atunci vindecă boala și restabilește penalitățile, în loc să vă infecteze sau să vă hrănească; altfel, are efectul său normal."
+        "Dacă ești sănătos, planta te poate îmbolnăvi. La infectare pierzi 1 punct de constituție, apoi 1 punct dintr-un atribut aleatoriu la fiecare 150 de ture ale tale (300 cu Robustețe), până la vindecare. Odihna nu te vindecă. O iarbă de vindecare, o poțiune de vindecare sau Miruvor vindecă orice boală și îi înlătură penalizările. Planta oferă și cantitatea obișnuită de hrană. Dacă această plantă este leacul bolii tale, vindecă boala și îți redă punctele de atribut pierdute din cauza ei. În acest caz nu își produce efectul obișnuit și nu te hrănește."
       ],
       "source_sha256": "1a36c79391b42d1d2638cd6767a512eb3c82dd50246dd4fe8ef6905e585cba05"
     },
     "effect.399": {
       "title": "O bucată de pâine neagră — efect cunoscut",
       "steps": [
-        "Oferă aproximativ 1.500 porții de hrană."
+        "Te hrănește pentru aproximativ 1.500 de ture obișnuite."
       ],
       "source_sha256": "d358279640cace15de4d1a702b32ebe61c8c90796a253163279dff44dacee8fd"
     },
     "effect.400": {
       "title": "Fâșie de carne uscată — efect cunoscut",
       "steps": [
-        "Oferă aproximativ 2.000 de runde de hrană, cu o probabilitate de bază de 20% de a contracta boală: -1 Constituție în cazul infecției, urmat de -1 la un atribut aleatoriu la fiecare 150 de runde ale jucătorului (300 cu \"Rezistență\"). Odihna nu vindecă boala. O plantă medicinală sau o poțiune de vindecare sau Miruvor pot vindeca orice boală."
+        "Te hrănește pentru aproximativ 2.000 de ture obișnuite. Riscul de bază de expunere la boală este de 20%. Dacă te îmbolnăvești, pierzi 1 punct de constituție, apoi 1 punct dintr-un atribut aleatoriu la fiecare 150 de ture ale tale (300 cu Robustețe). Odihna nu te vindecă. O iarbă de vindecare, o poțiune de vindecare sau Miruvor vindecă orice boală."
       ],
       "source_sha256": "60fb6ef370957c5bc80e489c5fc13dd8ee188e68604c3b1f8dd221f43c9335c1"
     },
     "effect.401": {
       "title": "O bucată de Lembas — efect cunoscut",
       "steps": [
-        "Oferă aproximativ 3.000 de runde de hrană și restabilește 1 punct de Grație."
+        "Te hrănește pentru aproximativ 3.000 de ture obișnuite și reface 1 punct pierdut de grație."
       ],
       "source_sha256": "c3fbee491d23938b05e2e4a9ba57ca6294c4ce5acd6c9cfae44b0e4f4afb0bff"
     },
     "item.throwing.ready": {
       "title": "Armă de aruncat: pregătită",
       "steps": [
-        "Deschide inventarul, selectează arma de aruncat și alege Ready pentru a muta obiectul la centură. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
+        "Deschide inventarul, selectează arma de aruncat și alege „Pregătește” ca să muți obiectul în harnașament. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
       ],
       "source_sha256": "cf3c627074fa43b9156e7d81f269029871f96de54eaa12d6893d5e5b85324ae4"
     },
     "item.throwing.active": {
-      "title": "Armă de aruncat: activ",
+      "title": "Armă de aruncat: activă",
       "steps": [
         "Deschide Change Active și alege rândul Throwing pentru arma pregătită. O suliță poate avea și un rând separat Melee. Pentru acest exercițiu alege Throwing. Verifică ce armă și ce scut vor fi active și confirmă. Sari peste lecție pentru a păstra echiparea actuală."
       ],
@@ -2571,7 +2571,7 @@
     "item.bow.ready": {
       "title": "Arc: pregătit",
       "steps": [
-        "Deschide inventarul, selectează arcul și alege Ready pentru a muta obiectul la centură. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
+        "Deschide inventarul, selectează arcul și alege „Pregătește” ca să muți obiectul în harnașament. Accesul la rucsac durează trei ture și un atac îl poate întrerupe. Sari peste lecție dacă preferi să păstrezi echiparea actuală."
       ],
       "source_sha256": "feb12c8654451c767dba1e16c5f5e5c1fe28c572a6bd249b9546b019e8bf3369"
     },
@@ -2611,16 +2611,16 @@
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
-      "title": "Capacitatea de transport",
+      "title": "Capacitatea harnașamentului",
       "steps": [
-        "{detail} Centura are o capacitate maximă de transport separată de rucsac. Echipamentul pregătit poate fi accesat în conformitate cu propriile reguli. Mutarea unui obiect între locurile de depozitare nu oferă o capacitate totală de transport nelimitată."
+        "{detail} Harnașamentul are o limită de volum separată de cea a rucsacului. Pentru echipamentul pregătit se aplică regulile de acces ale harnașamentului. Mutarea unui obiect dintr-un loc în altul nu elimină limitele de transport."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
     "storage.quiver": {
-      "title": "Capacitatea arcului",
+      "title": "Capacitatea tolbei",
       "steps": [
-        "{detail} Tolibă conține săgeți, respectând regulile sale de capacitate. Dacă sunt prea multe săgeți, acestea pot necesita spațiu în rucsac. Un grup de săgeți poate fi ridicat parțial, dacă doar o parte se potrivesc; verificați numărul efectiv colectat."
+        "{detail} Tolba are o capacitate proprie. Săgețile care nu încap pot avea nevoie de loc în rucsac. Dacă încape doar o parte dintr-un mănunchi, poți ridica doar acea parte. Verifică numărul de săgeți pe care le-ai luat."
       ],
       "source_sha256": "2901f8607c5fd29a7981ace679d30d65bec33cc9a7dd2ee160cf5d5901a7d403"
     },
@@ -2632,21 +2632,21 @@
       "source_sha256": "13beba1f2d1595f6ba75a4ba3519f791ed15c82ba0f795552a90818a63c498eb"
     },
     "storage.pack_access": {
-      "title": "Accesarea resurselor din grup",
+      "title": "Accesul la rucsac",
       "steps": [
         "Această acțiune necesită trei ture pentru a se finaliza. Inamicii pot acționa în timpul acestor ture, iar un atac sau anularea ta pot întrerupe acțiunea. Pregătește echipamentul de urgență înainte de luptă, dacă este posibil."
       ],
       "source_sha256": "68ce9a0651f5cd3b3f6f0cfa00a4a9173c9b2b10234538843f40c2b11cad2386"
     },
     "storage.pack_interrupted": {
-      "title": "Accesul la pachet întrerupt",
+      "title": "Accesul la rucsac a fost întrerupt",
       "steps": [
         "Un atac a întrerupt acțiunea cu rucsacul înainte de a se finaliza. Verificați locația actuală a obiectului și istoricul mesajelor. Este posibil să trebuiască să vă îndepărtați de pericol înainte de a încerca din nou."
       ],
       "source_sha256": "61323a01ebeb2584613eb833876bb048ed0ffdec5a8c84817e70dcd5c5098565"
     },
     "storage.partial_pickup": {
-      "title": "Doar o parte a stivei se potrivesc",
+      "title": "Încape doar o parte din teanc",
       "steps": [
         "Doar o parte din stoc s-a încadrat în spațiul disponibil. Verificați cantitatea colectată și obiectele care mai sunt pe podea. Dacă doriți să luați mai multe, eliberați spațiu sau alegeți o altă locație de depozitare."
       ],
@@ -2676,14 +2676,14 @@
     "world.forge": {
       "title": "La o forjă",
       "steps": [
-        "Cuptorul are utilizări limitate. Deschide funcția \"Turnătorie\" și inspectează articolele posibile și costurile aferente. Previzualizarea arată dificultatea, materialele, timpul necesar și numărul de utilizări ale cuptorului înainte de a te angaja. Un cuptor epuizat nu poate produce alte obiecte."
+        "O forjă are un număr limitat de utilizări. Cât timp ești la ea, deschide „Fierărie” ca să vezi ce obiecte poți făuri și cât costă. Înainte să începi, poți verifica dificultatea, materialele, timpul și numărul de utilizări necesare. O forjă epuizată nu mai poate produce obiecte."
       ],
       "source_sha256": "bfad51b7c10cba58b6c689df417a9a2593120603b70bcb227b89f338f4f25828"
     },
     "world.light_low": {
-      "title": "Resursele sunt în scădere",
+      "title": "Combustibilul e pe terminate",
       "steps": [
-        "Echipamentul tău de iluminare se apropie de sfârșit de combustibil. Găsește un recipient compatibil pentru reîncărcare sau pregătește un înlocuitor înainte de a se epuiza. Reîncărcarea sau schimbarea echipamentului necesită timp, așa că pregătește-te înainte de a întâlni inamici."
+        "Sursa de lumină pe care o porți mai are puțin combustibil. Caută combustibil compatibil sau pregătește o altă sursă de lumină înainte să se stingă. Realimentarea și schimbarea echipamentului consumă timp. Ocupă-te de ele înainte să întâlnești inamici."
       ],
       "source_sha256": "8786e11b6583b0e43678408501a1fee7bba9d4b250417c993581f86c9ac20971"
     },
@@ -2695,7 +2695,7 @@
       "source_sha256": "ca62ba96b924fd9ee4d3009ee950bb3039637fba1c89c180f84d34b99a19ec94"
     },
     "advancement.skills": {
-      "title": "Dezvoltarea unei abilități",
+      "title": "Dezvoltarea unei deprinderi",
       "steps": [
         "Următorul rang de bază al unei deprinderi costă 100 XP înmulțit cu rangul nou: rangul 1 costă 100 XP, rangul 2 încă 200 XP și așa mai departe. Bonusurile atributelor și echipamentului sunt separate. Verifică achiziția înainte de a cheltui experiența."
       ],
@@ -2730,9 +2730,9 @@
       "source_sha256": "ac468e0ab024628f128752a3715951099090cfd39d3a4223ee639136a4d5b935"
     },
     "tale.curse": {
-      "title": "O blestemare este dezvăluită",
+      "title": "Un blestem a fost dezvăluit",
       "steps": [
-        "{detail} „Blestemul poveștii” a fost dezvăluit. Citiți efectul și starea actuală în secțiunea „Blesteme cunoscute”. Spre deosebire de un obiect obișnuit blestemat, acesta poate afecta mai mulți eroi. În meniu: Known Curses."
+        "{detail} Ai descoperit un blestem al poveștii. În „Blesteme cunoscute” îi poți vedea efectul și câte niveluri s-au acumulat. Spre deosebire de un obiect blestemat obișnuit, un astfel de blestem poate afecta mai mulți eroi."
       ],
       "source_sha256": "643c4cbab6770e7477f7c02610dba41bb45d22e064014e86effdc4c084978e56"
     },
@@ -2751,7 +2751,7 @@
       "source_sha256": "1d60419f6a04d2ba62bbe407ec8beda911b90d95d32db5e4632185c09107ca57"
     },
     "tale.silmaril": {
-      "title": "O piatră de putere",
+      "title": "Un Silmaril",
       "steps": [
         "{detail} Ați obținut un Silmaril. Verificați misiunea principală și pregătiți-vă traseul de ieșire din Angband. Trebuie totuși să ajungeți la suprafață cu el pentru a finaliza evadarea."
       ],
@@ -2807,14 +2807,14 @@
       "source_sha256": "6a8e92396417cc8516de5c98afb86fa631b33d6090abdb369bfbb9ccbd64eaee"
     },
     "world.partition.5": {
-      "title": "Regiunea prădinii",
+      "title": "Regiune cu prăpăstii",
       "steps": [
         "{detail} Prăpastiile împart această zonă. O cădere poate să te rănească și să te împingă mai adânc. Verifică fiecare trecere și cerințele de sărit înainte de a te deplasa. Caută echipament căzut în apropierea marginilor, dar evită să te lupți pe poduri înguste. Fierul stelar poate apărea la adâncimi potrivite."
       ],
       "source_sha256": "1ac7b78069c279252a1a8b8e273296b94accf2744fda7cc7e91304bd5deb03a2"
     },
     "world.partition.6": {
-      "title": "Groapa Minunată",
+      "title": "Marea Peșteră",
       "steps": [
         "{detail} O peșteră imensă oferă perspective lungi și multe rute de acces; inamicii aflați la distanță vă pot vedea și pe voi. Folosiți acoperirea și mențineți distanță pentru a putea retrat. Obiectele găsite sunt variate, dar proviziile și pietrele prețioase sunt mai frecvente aici decât în sălile obișnuite; mithrilul poate apărea la adâncimi adecvate."
       ],
@@ -2842,9 +2842,9 @@
       "source_sha256": "0b6e1d31b20ee4e615bf7824a0ae2839d0ebad99ca4e4a04afccaeb834544a12"
     },
     "quest.1": {
-      "title": "Tulcas, cel puternic",
+      "title": "Tulkas cel Puternic",
       "steps": [
-        "{detail} Urmăriți creatura menționată în \"Misiuni\", apoi reveniți la Tulkas pentru recompensă. Verificați atacurile pe care ținta le cunoaște înainte de a o confrunta. În meniu: Quests."
+        "{detail} Vânează creatura indicată în „Misiuni”, apoi întoarce-te la Tulkas pentru recompensă. Înainte de luptă, verifică ce ai aflat despre atacurile țintei."
       ],
       "source_sha256": "122273fe7ed2b38312b361b2f5607c8b838595b2cc4905172a1b8532c3d6f2ad"
     },
@@ -2856,7 +2856,7 @@
       "source_sha256": "4a57218cb48c385ecaa5c1f64a58c52a285cfdfd9dec6591958f371a3a2295f5"
     },
     "quest.3": {
-      "title": "Mandos, Cel care aduce distrugerea",
+      "title": "Mandos Judecătorul",
       "steps": [
         "{detail} Urmați obiectivul lui Mandos referitor la spiritul legat, apoi colectați recompensa. Consultați secțiunea \"Misiuni\" pentru a vedea ținta exactă. Dacă părăsiți acest nivel înainte de a primi recompensa, misiunea este abandonată. În meniu: Quests."
       ],
@@ -2879,7 +2879,7 @@
     "quest.6": {
       "title": "Varda, Domnița Stelelor",
       "steps": [
-        "{detail} Verificați secțiunea \"Misiuni\" pentru a vedea destinația descoperită. Proba lui Varda se desfășoară pe primul nivel pe care îl atinzi după 500 de pași; trebuie să învingi pe Duruin înainte de a părăsi acel nivel, altfel misiunea se va pierde. Planifică coborârea înainte de a intra; locațiile neexplorate rămân necunoscute. În meniu: Quests."
+        "{detail} Destinația descoperită apare în „Misiuni”. Încercarea Vardei te așteaptă pe primul nivel la care ajungi dincolo de adâncimea de 500 ft. Ucide-l pe Duruin înainte de a părăsi nivelul sau vei pierde misiunea. Planifică-ți coborârea din timp. Locurile neexplorate rămân necunoscute."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3556,28 +3556,28 @@
       "source_sha256": "9acdbdf034fb6f517ac6777e0d382f4aa0f7c321b9bb88e781dd71fb002f1df5"
     },
     "status.heavy_stun": {
-      "title": "Efect puternic de imobilizare",
+      "title": "Amețire severă",
       "steps": [
-        "Severitatea loviturii este de cel puțin 50, astfel încât fiecare abilitate este redusă cu 4. Dacă valoarea este mai mare de 100, pierdeți capacitatea de a acționa. Claritatea sau Miruvor pot anula lovitura, permițându-vă totuși să folosiți un obiect."
+        "Intensitatea amețirii este de cel puțin 50 și toate deprinderile tale sunt reduse cu 4 puncte. Dacă intensitatea trece de 100, îți pierzi cunoștința și nu mai poți acționa. Bea o poțiune de claritate sau de Miruvor cât încă poți folosi obiecte."
       ],
       "source_sha256": "d2041d74ca364183b6ff7819e6677204dd809860e3c181ad8a93fff4c4ed47c5"
     },
     "status.knocked_out": {
-      "title": "Înfrânt",
+      "title": "Pierderea cunoștinței",
       "steps": [
-        "Severitatea loviturii este de peste 100. Nu puteți acționa până când aceasta nu scade suficient pentru a vă permite să vă recuperați. \"Continue\" încheie explicația; soluțiile devin disponibile odată ce puteți acționa din nou."
+        "Intensitatea amețirii a depășit 100. Nu poți acționa până când aceasta nu scade suficient ca să-ți revii. „Continuă” închide explicația. Vei putea folosi remedii când vei putea acționa din nou."
       ],
       "source_sha256": "9cbfc77d25d5d1d3e250b9f1eb3fdd3dc9204907e52edad5d2e51accfbfc74cd"
     },
     "status.full": {
-      "title": "Complet",
+      "title": "Sătul",
       "steps": [
-        "Aveți suficientă hrană pentru moment. Păstrați mâncarea pentru mai târziu, decât să o folosiți pentru a beneficia de alte efecte ale unei plante. \"Full\" indică cantitatea de hrană pe care o aveți, nu viața sau vocea dumneavoastră."
+        "Ești sătul. Păstrează hrana pentru mai târziu, cu excepția cazului în care ai nevoie de un alt efect al unei plante. Această stare se referă la cât ai mâncat, independent de punctele de viață sau de voce."
       ],
       "source_sha256": "932c011b434c5fab5d60bc0d874351686bc760fa5397656e4afe7db36996066c"
     },
     "status.song_lockout_timer": {
-      "title": "Funcția de cântat a fost temporar dezactivată",
+      "title": "Cântatul este blocat temporar",
       "steps": [
         "Un duel vocal a împiedicat temporar începerea unui alt cântec. Așteptați expirarea blocării afișate, în timpul normal al jocului. O poțiune de Voce restabilește Vocea, dar nu elimină această blocare."
       ],
@@ -3600,35 +3600,35 @@
     "status.leaping": {
       "title": "Salt",
       "steps": [
-        "Te afli în plină săritură. Aterizarea face parte din acțiunea inițială. O aterizare dificilă te poate lăsa pe pătratul opus, așa că verifică terenul și inamicii după ce săritura se finalizează."
+        "Ești în aer. Aterizarea face parte din săritura deja începută. Dacă locul de aterizare e blocat, poți ajunge pe pătratul peste care încercai să sari. După aterizare, verifică terenul și inamicii din jur."
       ],
       "source_sha256": "66912b94ed346a3d5bf7b8d2bfba0b0ad2d2c697b57f4bf5937601b70754ef94"
     },
     "status.knocked_back": {
-      "title": "Expulzat",
+      "title": "Împins înapoi",
       "steps": [
-        "Ați fost deplasat într-un alt câmp. Verificați terenul de sub picioare și inamicii din apropiere imediat; deplasarea vă poate pune într-o capcană sau într-un alt pericol."
+        "Ai fost împins pe altă căsuță. Verifică imediat terenul de sub picioare și inamicii din apropiere. E posibil să fi ajuns într-o capcană sau pe un teren periculos."
       ],
       "source_sha256": "9958e811d72ddf7496540381799cc368816fc4d5f772cb4c7d0890035309a886"
     },
     "status.skip_next_turn": {
-      "title": "O rundă pentru recuperare",
+      "title": "O tură de recuperare",
       "steps": [
         "Ultima acțiune pe care o efectuați sau un efect necesită un tur de recuperare. „Smite” este un exemplu. Trebuie să așteptați acest tur de recuperare înainte de a alege o altă acțiune obișnuită."
       ],
       "source_sha256": "c8f54490a8427df866de57ca92c465ab6c2aaebd56552aa202b3344340c09c57"
     },
     "status.was_entranced": {
-      "title": "Revenirea din starea de trans",
+      "title": "Revenirea din transă",
       "steps": [
-        "Transul tocmai s-a terminat. Până când protecția se va termina, sunteți temporar protejat de a fi vrăjit din nou, ceea ce vă oferă ocazia să acționați. Alegeți următorul pas sigur înainte ca protecția să expire."
+        "Tocmai ai ieșit din transă. Pentru scurt timp ești protejat împotriva unei noi transe și poți acționa. Alege o acțiune sigură înainte să expire protecția."
       ],
       "source_sha256": "f67b9a968b32e63a7bf99225ecee3cd841686a3ef85ef578a60e6e4d898f9988"
     },
     "status.vengeance": {
-      "title": "Răspunsul este pregătit",
+      "title": "Răzbunarea este pregătită",
       "steps": [
-        "Suferirea de daune în luptă corp la corp a pregătit „Vengeance”: următorul tău atac corp la corp va obține un zar suplimentar de daune. Daunele suplimentare nu vor adăuga mai mulți zaruri la acest bonus."
+        "Ai suferit daune corp la corp, iar acum Răzbunarea este pregătită: la următoarea lovitură corp la corp care nimerește ținta primești un zar suplimentar de daune. Dacă mai suferi daune, bonusul nu se cumulează."
       ],
       "source_sha256": "d8474aff99a4f3f8238e5c0e39e85824df5ddee1234d9e40ebe5e25c1bf8098b"
     },
@@ -3668,7 +3668,7 @@
       "source_sha256": "67cc68c91d08c99218e67462dde72d884d15f082eff377fa7319791149b17125"
     },
     "status.in_web": {
-      "title": "Prins într-o plasă",
+      "title": "Prins într-o pânză de păianjen",
       "steps": [
         "Ești prins într-o plasă, în care atacul și eschiva ta sunt reduse la jumătate. Încercarea de a te mișca împotriva plasei poate dura mai multe ture. Saltul nu te va elibera din ea."
       ],
@@ -3689,9 +3689,9 @@
       "source_sha256": "10c9427a49e6d849929bb503854d86da1adb7c0d3b45d6c32218d840da210551"
     },
     "status.running": {
-      "title": "Corpul",
+      "title": "Alergare",
       "steps": [
-        "Mișcarea se repetă până la întrerupere. Fiecare mișcare consumă timp, iar inamicii pot acționa între mișcări. Inspectați-vă traseul înainte de a începe o nouă încercare."
+        "Când alergi, repeți deplasarea până când ceva te întrerupe. Fiecare pas consumă timp, iar inamicii pot acționa între pași. Verifică traseul înainte să pornești din nou în alergare."
       ],
       "source_sha256": "dbd6d44e9cb1a518e534903baadd27af7e30dea5d5b52b483196532c7252e7a0"
     },
@@ -3731,14 +3731,14 @@
       "source_sha256": "370482ddbd5cbf9d9f8399bc06251a5fab7aa37101b2af66c277c9548e8ab654"
     },
     "status.on_the_run": {
-      "title": "În căutare",
+      "title": "Evadarea cu un Silmaril",
       "steps": [
-        "Vă escapeți cu un Silmaril. Verificați obiectivul principal și traseul spre suprafață. Aceasta este faza de evadare a expediției; mișcarea automată este o comandă separată."
+        "Încerci să scapi din Angband cu un Silmaril. Verifică obiectivul principal și traseul spre suprafață. Ești în etapa de evadare a expediției. Alergarea automată este o comandă de deplasare separată."
       ],
       "source_sha256": "8d255d5e83981dccf22808e24c16ca108c0fe9669b1f0949ba498715a335ce9b"
     },
     "combat.stealth": {
-      "title": "Apropie-te cu prudență",
+      "title": "Apropie-te în liniște",
       "steps": [
         "{subject} nu te-a observat încă. În modul de furișare ești mai greu de detectat, dar majoritatea acțiunilor durează mai mult. Distanța și adăpostul ajută și ele. Activează modul înainte de apropiere dacă vrei să treci neobservat.",
         "Intră în modul de ascunziș pentru această simulare. Poți dezactiva această funcție mai târziu, când viteza este mai importantă. Poți să sari peste această etapă dacă preferi o abordare diferită."

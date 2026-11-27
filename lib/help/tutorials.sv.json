@@ -66,14 +66,14 @@
     "world.depth": {
       "title": "En ny våning",
       "steps": [
-        "{detail} Trappor och korridorer skapar en ny karta när du ändrar djup. Att lämna ett område lämnar dess nuvarande layout och återstående föremål. Kontrollera först ditt mål och dina förnödenheter; att återvända till det djupet genererar en ny karta."
+        "{detail} Trappor och schakt skapar en ny karta när du byter djup. När du lämnar en nivå försvinner dess nuvarande karta och de föremål som ligger kvar. Kontrollera först ditt mål och dina förnödenheter. Om du återvänder till samma djup får du ännu en ny karta."
       ],
       "source_sha256": "e3271845b29a13dc6b4a96a2a12413dcf73f45bfc76a752e41afb50aa350f94a"
     },
     "world.minimum_depth": {
       "title": "Minsta djup ökar",
       "steps": [
-        "{detail} Minimumdjupet är det minsta djup du normalt kan nå. Det ökar när du spenderar tid i spelet. En uppförs trappa kan återföra dig till samma djup eller ett djup som är större, om dess destination är ovanför den gränsen. Att läsa menyer och beskrivningar är gratis; vila och rörelse räknas mot tiden."
+        "{detail} Minimidjupet är den grundaste nivå du normalt kan nå. Gränsen flyttas nedåt när tiden går. Om en trappa leder upp förbi gränsen kan du hamna på samma djup eller längre ned. Det kostar ingen tid att läsa menyer och beskrivningar. Vila och löpning räknas in i tiden."
       ],
       "source_sha256": "f94f5c29b927aa34e7c8e4fad93f170fa447c8cddc50ede6139b0e73461402c2"
     },
@@ -410,9 +410,9 @@
       "source_sha256": "8d58c7eb4486bb4e5e87df5c41298c08dd3dce15f08ecb42fd5e3f2d4c2985ab"
     },
     "status.stun": {
-      "title": "Bedövning",
+      "title": "Omtöckning",
       "steps": [
-        "{detail} Stun sänker varje färdighet med 2, eller med 4 vid en svårighetsgrad på 50 eller högre. Vid 100 eller högre, blir du bedövad och kan inte agera. Clarity eller Miruvor tar bort stun; använd dem medan du fortfarande kan agera."
+        "{detail} Omtöckning sänker alla färdigheter med 2, eller med 4 vid en grad på minst 50. Över 100 blir du medvetslös och kan inte agera. Clarity eller Miruvor häver omtöckningen. Använd medlet medan du fortfarande kan agera."
       ],
       "source_sha256": "3e8b128e72352e22428e57ba9475c2566409c7796684a4e1c19e379bd193140f"
     },
@@ -447,7 +447,7 @@
     "status.entranced": {
       "title": "Trans",
       "steps": [
-        "Du är förförd och kan inte agera förrän trancen är över. Du kan inte välja eller dricka ett läkemedel under denna period. \"Continue\" avslutar förklaringen så att spelet kan fortsätta."
+        "Du är i trans och kan inte agera förrän den är över. Under tiden kan du inte välja eller dricka något botemedel. Välj ”Fortsätt” för att stänga förklaringen och återgå till spelet."
       ],
       "source_sha256": "2487d8d8462bf8e80d186741b4f61cd18b18a05a37b097bec81310feb13d9d63"
     },
@@ -587,7 +587,7 @@
     "status.starving": {
       "title": "Svält",
       "steps": [
-        "{detail} Hunger orsakar skada och förhindrar återhämtning av hälsa. Ät kända, näringsrika föremål omedelbart. Ett enbart läkande föremål lämnar skadan oförändrad."
+        "{detail} Svält gör skada och hindrar hälsan från att återhämta sig. Ät mat som du vet är näringsrik så fort som möjligt. Ett läkande föremål löser inte problemet så länge du svälter."
       ],
       "source_sha256": "5c9f10f645ee2a7b36c612a33886c0e42a5689469701626ecb228f43c533bf25"
     },
@@ -747,7 +747,7 @@
     "menu.settings": {
       "title": "Inställningar",
       "steps": [
-        "Spelinstruktionerna har tre lägen: \"Inaktiverat\", \"Normal\" och \"Utökat\". \"Normal\" ger vägledning för grundläggande handlingar och överlevnad, medan \"Utökat\" lägger till detaljerade instruktioner. Du kan granska de instruktioner du har stött på eller återställa framstegen i denna berättelse separat. Instruktioner för enhetstyrning och ledtrådar har sina egna inställningar."
+        "Spelhandledningen har tre lägen: Avstängt, Normalt och Utökat. Normalt vägleder dig i grundläggande handlingar och överlevnad. Utökat lägger till fördjupade lektioner. Du kan läsa om lektioner du redan har stött på eller återställa handledningens framsteg för just den här berättelsen. Handledning för olika styrsätt och tips från skelett har egna inställningar."
       ],
       "source_sha256": "ae082ca4977bc56d6c9f5214cc4bc9148d569956d1ea60eb551b36a444b69a2d"
     },
@@ -1077,8 +1077,8 @@
     "ability.15.preview": {
       "title": "Väktare (Warden)",
       "steps": [
-        "Vakten lägger till hälften av skillnaden mellan din investerade närstrid och bågskytte till bågskytte, avrundat nedåt. Med \"Versatility\" också aktiv, lägger den istället till en tredjedel av din investerade närstrid, avrundat uppåt. Utrustnings- och attributbonusar exkluderas från denna beräkning.",
-        "Din första aktiva vapenbyte från närstrid till båge är gratis innan du utför nästa åtgärd. Med \"Throwing\" kan du också byta mellan närstrid och kast, eller mellan olika vapen för närstrid. Med \"Versatility\" kan du också byta mellan olika vapen för närstrid eller mellan bågar."
+        "Om du har satsat fler poäng på Närstrid än på Bågskytte får du med Väktare en bonus på Bågskytte som motsvarar halva skillnaden, avrundad nedåt. Om Mångsidighet också är aktiv får du i stället en tredjedel av de satsade närstridspoängen som bonus på Bågskytte, avrundad uppåt. Bonusar från utrustning och egenskaper räknas inte med.",
+        "Ditt första byte av aktivt vapen från närstridsvapen till båge är gratis före nästa handling. Med Throwing kan du också byta mellan ett närstridsvapen och ett kastvapen eller mellan närstridsvapen. Med Mångsidighet kan du också byta mellan närstridsvapen eller mellan bågar."
       ],
       "source_sha256": "5dd794eb47016cb523d154c563c53e7a00e660970b2d27e97bff8dc4ab882fc9"
     },
@@ -1127,8 +1127,8 @@
     "ability.25.preview": {
       "title": "Mångsidighet (Versatility)",
       "steps": [
-        "Flexibilitet ökar din styrka i närstrid med hälften av skillnaden mellan din investerade bågskytte och närstrid, avrundat nedåt. Om Warden också är aktiv, ökar den istället din investerade bågskytte med en tredjedel, avrundat uppåt. Utrustnings- och attributbonusar räknas inte med i denna beräkning.",
-        "Din första aktiva vapenvändning innan nästa åtgärd är gratis från båge till närstrid. Med kastvapen kan du också växla mellan båge och kastvapen eller mellan bågar. Med Warden kan du också växla mellan närstridsvapen eller mellan bågar."
+        "Om du har satsat fler poäng på Bågskytte än på Närstrid får du med Mångsidighet en bonus på Närstrid som motsvarar halva skillnaden, avrundad nedåt. Om Väktare också är aktiv får du i stället en tredjedel av de satsade bågskyttepoängen som bonus på Närstrid, avrundad uppåt. Bonusar från utrustning och egenskaper räknas inte med.",
+        "Ditt första byte av aktivt vapen från båge till närstridsvapen är gratis före nästa handling. Med Throwing kan du också byta mellan en båge och ett kastvapen eller mellan bågar. Med Väktare kan du också byta mellan närstridsvapen eller mellan bågar."
       ],
       "source_sha256": "e86a5fd3d00b207a3434b54efdf0dfe1f471e6231df621a59599e8abe61bacb7"
     },
@@ -1576,7 +1576,7 @@
     "ability.149.preview": {
       "title": "Dråpets sång (Song of Slaying)",
       "steps": [
-        "En kritisk närstridsattack dödar målet om målets hälsa är högst dubbelt så stor som din effektiva röst. Det måste vara en kritisk attack; vanliga attacker utlöser inte denna effekt."
+        "En kritisk närstridsträff dödar målet om dess hälsa är högst dubbelt så stor som ditt effektiva sångvärde. Vanliga träffar utlöser inte effekten."
       ],
       "source_sha256": "ec38d6c4fe2ef2ae8ccd79e5efa914047ae4a5f7a129df88fa38d5b71ec081c7"
     },
@@ -2150,7 +2150,7 @@
     "terrain.82": {
       "title": "Schakt upp",
       "steps": [
-        "En uppförsram kan gå längre än en vanlig trappa, men den minsta djupet kan istället placera dig på samma eller djupare nivå. Regeln om löften gäller fortfarande. Läs destinationen innan du reser; kartan genereras nytt."
+        "Ett schakt uppåt kan föra dig högre än en vanlig trappa, men minimidjupet kan göra att du hamnar på samma djup eller ännu djupare. Edens begränsningar gäller fortfarande. Läs vart schaktet leder innan du lämnar nivån. Kartan skapas på nytt."
       ],
       "source_sha256": "611a70f61c0926db1e59742dbcf4019915ec55ee23de71386f11bc936ae20033"
     },
@@ -2473,7 +2473,7 @@
     "effect.382": {
       "title": "Skräck — känd effekt",
       "steps": [
-        "Om skyddet mot rädsla inte förhindrar effekten, orsakar rädsla i 10d4 rundor och saktar ner rörelsen i 5d4 rundor. Att förhindra rädsla förhindrar också denna rörelsefördel. Det ger vanlig örtnäring. Om detta är boten för din nuvarande sjukdom, botar det sjukdomen och återställer dess negativa effekter istället för att tillämpa den normala effekten eller näringen; annars tillämpas den normala effekten."
+        "Om ditt skydd inte avvärjer rädslan blir du rädd i 10d4 drag och får högre hastighet i 5d4 drag. Om du motstår rädslan får du heller ingen hastighetsbonus. Örten ger normalt med näring. Om örten är boten mot din nuvarande sjukdom botar den sjukdomen och tar bort dess egenskapsavdrag. Då uteblir den vanliga effekten och näringen. Annars verkar örten som vanligt."
       ],
       "source_sha256": "5b77dbfdeeef100f3f8328f96e08cdb72200ab12abb9767e2154fa08863e8094"
     },
@@ -2494,7 +2494,7 @@
     "effect.385": {
       "title": "Tomhet — känd effekt",
       "steps": [
-        "Minskar näringsupptaget med cirka 1 000 vanliga rundor, vilket kan förvärra hungern när dess normala effekt träder i kraft. Om detta är boten för din nuvarande sjukdom, botar det sjukdomen och återställer dess negativa effekter istället för att tillämpa den normala effekten eller näringsupptaget; annars tillämpas den normala effekten."
+        "Den vanliga effekten minskar din näring med ungefär 1 000 vanliga drag och kan förvärra hungern. Om örten är botemedlet mot din nuvarande sjukdom häver den sjukdomen och återställer de egenskapspoäng du har förlorat. Då uteblir örtens vanliga effekt och påverkan på näringen. Annars verkar den som vanligt."
       ],
       "source_sha256": "5ce314f56c8b5bbb09224dbe1ae73c4448bb2b21642b42de198d56235d58eba6"
     },
@@ -2606,14 +2606,14 @@
     "storage.pack": {
       "title": "Förvaring av utrustning",
       "steps": [
-        "{detail} Ryggsäcken har en egen viktgräns. Vikten bidrar också till din totala last. Läs båda gränserna när du väljer vad du ska bära – ett litet men tungt föremål och ett stort men lätt föremål skapar olika begränsningar."
+        "{detail} Ryggsäcken har en egen volymgräns. Föremålens vikt räknas också in i den totala lasten. Håll reda på båda gränserna när du väljer vad du ska bära. Ett litet, tungt föremål ökar lasten, medan ett stort, lätt föremål tar mycket plats."
       ],
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
       "title": "Bärselens kapacitet",
       "steps": [
-        "{detail} Bärselen har en egen begränsning för hur mycket den kan innehålla, separat från ryggsäcken. Utrustning som är redo kan nås enligt sina egna regler. Att flytta en föremål mellan förvaringsplatser skapar inte en oändlig total lastkapacitet."
+        "{detail} Bärselen har en egen volymgräns, skild från ryggsäckens. För utrustning som är redo gäller särskilda regler när du tar fram den. Gränsen för den totala lasten gäller även när du flyttar föremål mellan förvaringsplatserna."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
@@ -2648,7 +2648,7 @@
     "storage.partial_pickup": {
       "title": "Endast en del av stapeln passar",
       "steps": [
-        "Endast en del av stacken rymde i det tillgängliga förvaringsutrymmet. Kontrollera mängden som samlats in och de föremål som fortfarande ligger på golvet. Om du vill ta med mer, använd ledigt utrymme eller välj en annan förvaringsplats."
+        "Bara en del av högen fick plats. Kontrollera hur mycket du plockade upp och vad som ligger kvar på marken. Frigör plats eller välj ett annat förvaringsställe om du vill ta med mer."
       ],
       "source_sha256": "0fd1a7bb882e490e84224ed873a113e86fe8dde1b2335844098cc81e2b618929"
     },
@@ -2662,7 +2662,7 @@
     "world.run": {
       "title": "Löpning och upprepade rörelser",
       "steps": [
-        "Rörelsen upprepas tills du stoppar den eller något avbryter den. Fiender och timern med minimal djup fortsätter mellan stegen. Varje steg tar tid; undersök din rutt innan du börjar eller fortsätter en rörelse."
+        "När du springer tar du steg efter steg tills du stannar eller något avbryter dig. Fiender kan agera mellan stegen och tiden till nästa ökning av minsta djup fortsätter att gå. Varje steg kostar tid. Kontrollera vägen innan du börjar eller fortsätter att springa."
       ],
       "source_sha256": "2bbe07516ae420b7d6ee1e287ea4b0a7d6f4024bf739db16b8e436fca72ce995"
     },
@@ -2674,9 +2674,9 @@
       "source_sha256": "d736a4fbda85cbff7b263fbacd3afb7a4d62740a39ffd513a2f8ba153094689d"
     },
     "world.forge": {
-      "title": "Vid en smed",
+      "title": "Vid en smedja",
       "steps": [
-        "En smed har begränsade användningsområden. Öppna \"Smide\" och inspektera möjliga föremål och deras kostnader. Förhandsvisningen visar svårighetsgrad, material, tid och antalet smideanvändningar innan du bestämmer dig. En uttömd smed kan inte tillverka ett annat föremål."
+        "En smedja har ett begränsat antal laddningar. Öppna Smide vid smedjan för att se vad du kan tillverka och vad det kostar. Förhandsvisningen visar svårighetsgrad, material, tid och antal smidesladdningar innan du bekräftar. När laddningarna är slut kan du inte tillverka fler föremål vid den smedjan."
       ],
       "source_sha256": "bfad51b7c10cba58b6c689df417a9a2593120603b70bcb227b89f338f4f25828"
     },
@@ -2711,7 +2711,7 @@
     "quest.progress": {
       "title": "Framsteg i uppdrag",
       "steps": [
-        "{detail} Kontrollera \"Uppdrag\" för att se det återstående målet och eventuella begränsningar. Att nå målet kan fortfarande innebära ett återbesök för att hämta belöningen. I menyn: Quests."
+        "{detail} Se Uppdrag för att hitta återstående mål och eventuella begränsningar. När målet är uppnått kan du behöva återvända för att hämta belöningen."
       ],
       "source_sha256": "f01b40c27b5554bae219cbd79a200bc253080620dbd7c9973fcb8c36919bcf5e"
     },
@@ -2753,7 +2753,7 @@
     "tale.silmaril": {
       "title": "En Silmaril",
       "steps": [
-        "{detail} Du har fått en Silmaril. Kontrollera huvuduppdraget och förbered din rutt för att fly från Angband. Du måste fortfarande ta dig till ytan för att fullborda flykten."
+        "{detail} Du har fått tag i en silmaril. Läs huvuduppdraget och planera din väg ut ur Angband. För att fullborda flykten måste du nå ytan med silmarillen."
       ],
       "source_sha256": "9f8860d7b3bbac6bd37d1f6987650c9b04437d1da18b5ffcc0c6d90d1ea89cd1"
     },
@@ -2844,42 +2844,42 @@
     "quest.1": {
       "title": "Tulkas, den starke",
       "steps": [
-        "{detail} Fånga varelsen som nämns i \"Uppdrag\", och återvänd sedan till Tulkas för att få belöningen. Kontrollera målets kända attacker innan du konfronterar den. I menyn: Quests."
+        "{detail} Jaga varelsen som anges under Uppdrag och återvänd till Tulkas för att hämta belöningen. Kontrollera varelsens kända angrepp innan du möter den."
       ],
       "source_sha256": "122273fe7ed2b38312b361b2f5607c8b838595b2cc4905172a1b8532c3d6f2ad"
     },
     "quest.2": {
       "title": "Aulë, smeden",
       "steps": [
-        "{detail} Skapa ett verk som uppfyller Aulés nuvarande krav, och samla sedan belöningen. Läs målet och smedförslaget innan du använder material. Om du lämnar detta stadium innan belöningen har erhållits, avslutas uppdraget."
+        "{detail} Smid något som uppfyller Aulës nuvarande krav och hämta sedan belöningen. Läs uppdragets mål och smidesförslaget innan du använder material. Om du lämnar nivån innan du fått belöningen ger du upp uppdraget."
       ],
       "source_sha256": "4a57218cb48c385ecaa5c1f64a58c52a285cfdfd9dec6591958f371a3a2295f5"
     },
     "quest.3": {
-      "title": "Mandos, den dominerande",
+      "title": "Mandos, domaren",
       "steps": [
-        "{detail} Följ Mandos mål angående den fångade andens återkomst, och samla sedan belöningen. Kontrollera \"Uppdrag\" för att se exakt måltavla. Om du lämnar detta område innan du har fått belöningen, avslutas uppdraget. I menyn: Quests."
+        "{detail} Befria den bundna anden enligt Mandos instruktioner och hämta sedan belöningen. Se Uppdrag för att hitta det exakta målet. Om du lämnar nivån innan du fått belöningen ger du upp uppdraget."
       ],
       "source_sha256": "a5e15e78f02946cbd295ae422bad111088902f615f8033c7085d13be31677443"
     },
     "quest.4": {
-      "title": "Nienna, den medlidenhetens drottning",
+      "title": "Nienna, medlidandets härskarinna",
       "steps": [
-        "{detail} Hitta trappan nedåt utan att döda någon, och följ sedan instruktionerna för belöningen innan du lämnar. Undvik effekter som kan leda till död, inklusive automatiska attacker. Att lämna nivån innan du har fått belöningen innebär att du misslyckas med uppdraget."
+        "{detail} Hitta trappan ned utan att döda någon. Följ sedan instruktionerna för belöningen innan du lämnar nivån. Undvik effekter som kan döda, även automatiska uppföljningsanfall. Om du lämnar nivån innan du fått belöningen ger du upp prövningen."
       ],
       "source_sha256": "54fceb5f8fb865850d9e2c767b5fd0e8b2bc8fe8cc8f57cb3e7b881c304ebeea"
     },
     "quest.5": {
       "title": "Oromë, den stora jägaren",
       "steps": [
-        "{detail} Jakten räknar med vargar, spindlar, ormar och vampyrer separat. Kontrollera varje grupps totala hälsa i \"Uppdrag\"; att döda fler av en grupp fyller inte kraven för en annan grupp. I menyn: Quests."
+        "{detail} Jakten räknar vargar, spindlar, ormar och vampyrer var för sig. Se det aktuella antalet för varje grupp under Uppdrag. Extra fällda varelser i en grupp räknas inte mot kravet för någon annan grupp."
       ],
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },
     "quest.6": {
-      "title": "Varda, Stjärnans drottning",
+      "title": "Varda, stjärnornas härskarinna",
       "steps": [
-        "{detail} Kontrollera \"Uppdrag\" för att se den avslöjade destinationen. Vardas uppdrag är på det första våningen du når efter 500 fot; besegra Duruin innan du lämnar den våningen, annars förlorar du uppdraget. Planera din nedstigning innan du går in; okända platser förblir okända. I menyn: Quests."
+        "{detail} Se Uppdrag för att hitta den avslöjade platsen. Vardas prövning äger rum på den första nivån du når djupare än 500 fot. Döda Duruin innan du lämnar nivån, annars går uppdraget förlorat. Planera nedstigningen innan du går in på nivån. Outforskade platser förblir okända."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3698,7 +3698,7 @@
     "status.smithing": {
       "title": "Smide pågår",
       "steps": [
-        "Smide är i full gång. Arbetet fortsätter under den tid som anges i den godkända förslaget. Om arbetet avbryts, kontrollera det ofärdiga arbetet och de återstående kostnaderna innan du återupptar."
+        "Du har börjat smida. Arbetet tar den tid som angavs när du godkände förslaget. Om du blir avbruten kontrollerar du arbetsstycket och de återstående kostnaderna innan du fortsätter."
       ],
       "source_sha256": "77a74ef2527822b1ed23a48d5853f9ea076cc8ed4ca3e1beab17678cbcca024d"
     },
@@ -3746,23 +3746,23 @@
       "source_sha256": "b85c89b23bb74b88561878bf681c5cfc81fde7632b84b55b0b1e7b86f2c26851"
     },
     "world.water": {
-      "title": "Djup vatten",
+      "title": "Grunt vatten",
       "steps": [
-        "Att röra sig, gå igenom eller ut ur vatten är långsammare och skapar vågor. Varje vattenruta som passerats till fots innebär en liten risk för sjukdom. Planera en torr rutt när du behöver hastighet eller smygande. Ett lyckat hopp undviker kontakt med vatten, men \"klicka för att resa\" innebär att man går i vattnet."
+        "Det går långsammare att gå ner i vattnet, genom det eller upp ur det, och det plaskar. Varje vattenruta du kliver in i medför en liten risk att bli sjuk. Välj en torr väg om du behöver röra dig snabbt eller obemärkt. Med ett lyckat språng slipper du röra vid vattnet. Om du klickar för att gå till en plats vadar du i vattnet."
       ],
       "source_sha256": "0d8c76b8e3504bbafb0776bf2bbeb16c9e82ddbc734931dc9079a71df8add203"
     },
     "world.lava": {
       "title": "Undvik lava",
       "steps": [
-        "Lava är dödlig. Kontakt med marken utan tillräcklig motståndskraft mot eld dödar dig omedelbart; även med motstånd får du allvarliga skador vid inträde och medan du befinner dig där. Att hoppa orsakar också värmeskador. Undersök rutan för att bedöma din nuvarande risk innan du väljer vilken passage du ska använda."
+        "Lava är dödlig. Om du kliver ner i lavan utan tillräckligt nettomotstånd mot eld dör du omedelbart. Även med motstånd tar du stor skada när du kliver ner och varje drag du står kvar. Ett språng ger också värmeskada. Undersök rutan för att se risken innan du försöker ta dig över."
       ],
       "source_sha256": "9c3e4f0b5e6dfcd8ac68f1cda3fc30f9366b021c108c21a70e9b58b16d186954"
     },
     "world.meltingice": {
       "title": "Smältande is",
       "steps": [
-        "Smältande is har de vanliga nackdelarna för isytan. Varje gång du landar eller senare rör dig på isen har du en 20% chans att bryta den. Nära stranden blir det grunt vatten; längre ut kan det bli djupt vatten, där du inte kan attackera. Flygande varelser och framgångsrika hopp bryter inte isen."
+        "De vanliga avdragen för att stå på is gäller även på smältande is. Risken att isen brister är 20 % när du kliver ut på isen och varje följande drag du står på den. Nära stranden uppstår grunt vatten. Längre ut kan vattnet bli djupt, och där kan du inte anfalla. Flygande varelser och lyckade språng får inte isen att brista."
       ],
       "source_sha256": "1e82c6980fb476a480e1525ea208c81fbd32dfffc12cc51c9ff8a4520695082f"
     },
@@ -3784,14 +3784,14 @@
     "world.ice": {
       "title": "Strider på is",
       "steps": [
-        "Medan du står på is, har du -2 på närstrid, -2 på båge och -2 på undvikande. Rörelsen tar sin vanliga tid, men en målmedveten fiende som skjuts tillbaka på isen glider upp till två rutor. Torr mark ger dig bättre fotfäste i strid. Eld smälter isen till vatten; kyla fryser vattnet till is."
+        "När du står på is får du -2 i närstrid, -2 i bågskytte och -2 i undvikande. Det tar lika lång tid att förflytta sig som vanligt. Ett mål som står på isen och knuffas bakåt glider upp till två rutor. Torr mark ger dig bättre fotfäste i strid. Eld smälter is till vatten och kyla fryser vatten till is."
       ],
       "source_sha256": "1b15d7fc433f5de2cfd77e140671d4587e60d2833bee9cf97e5c361ea55244a1"
     },
     "world.poison": {
-      "title": "Giftigt syra",
+      "title": "Giftig syra",
       "steps": [
-        "Att använda giftigt syra till fots eller att spendera turer på att använda den, ger förgiftning. Lämna den innan du stannar för att läka eller använda ett motgift, eller så kan du förgiftas igen. Motstånd mot förgiftning minskar exponeringen; ett lyckat hopp undviker kontakt."
+        "Du förgiftas när du går ut i giftig syra eller tillbringar drag i den. Gå upp ur syran innan du stannar för att läka eller ta ett motgift, annars kan nästa dos förgifta dig igen. Giftmotstånd minskar dosen. Ett lyckat hopp gör att du slipper kontakt."
       ],
       "source_sha256": "d3172f39639691505b20e5ea7a0d76920eb3e894a5d88af53ffabe2d24ba6b6d"
     },
@@ -3922,7 +3922,7 @@
     "world.deepwater": {
       "title": "Djupvatten",
       "steps": [
-        "Att simma in, igenom eller ut ur djup vatten kräver fyra gånger normal rörelseenergi, och du kan inte attackera medan du är under vattnet. Välj att gå över torrt underlag eller en bro, och planera din utgång innan du går in. Simning innebär också att man blir blöt och ökar risken för att få en liten sjukdom."
+        "Att simma ut i, genom eller upp ur djupt vatten kräver fyra gånger så mycket rörelseenergi som vanligt. Du kan inte anfalla under vattnet. Välj helst torr mark eller en bro. Planera var du ska ta dig upp innan du går i. Det plaskar när du simmar, och det finns en liten risk att bli sjuk."
       ],
       "source_sha256": "ba16d40f6ed1304cefadc3450e58baea826df3c499a5467bfed401b5f30eeaca"
     }
@@ -3949,7 +3949,7 @@
     "Select the item, then choose Ready.": "Välj föremålet och sedan ”Flytta till bärselen”.",
     "Select the equipment you want to wear or wield.": "Välj utrustningen du vill bära eller hålla i handen.",
     "Select an item to preview.": "Välj ett föremål att granska.",
-    "Select the required item and choose Use.": "Välj det efterfrågade föremålet och sedan Use.",
+    "Select the required item and choose Use.": "Välj föremålet som behövs och sedan ”Använd”.",
     "Choose a Throwing row, then confirm the change.": "Välj raden ”Throwing” för kastvapen och bekräfta bytet.",
     "Make the requested selection in the open menu.": "Gör det efterfrågade valet i den öppna menyn.",
     "Throw active weapon": "Kasta det aktiva vapnet",
@@ -4075,7 +4075,7 @@
     "Stun %d: %+d to every skill.": "Bedövning %d: %+d på varje färdighet.",
     "%s drain changed from %d to %d. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.": "%s: förlusten ändrades från %d till %d. I egenskapsöversikten skiljs den från utrustningsavdrag och bonusar som löper ut.",
     "Health: %d/%d. Read the last attack and its effects before acting again.": "Hälsa: %d/%d. Läs om det senaste anfallet och dess följder innan du agerar igen.",
-    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Minsta djup är nu %d fot. Spelhandlingar får tiden att gå. Läsning tar ingen speltid.",
+    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Minimidjupet är nu %d fot. Handlingar i spelet får gränsen att flyttas nedåt. Läsning kostar ingen speltid.",
     "Pack space: %d.%d/%d.%d qt.": "Utrymme i ryggsäcken: %d,%d/%d,%d qt.",
     "Harness space: %d.%d/%d.%d qt.": "Utrymme i bärselen: %d,%d/%d,%d qt.",
     "Arrows: %d. Current free Quiver space: %d.": "Pilar: %d. Lediga platser i kogret: %d.",

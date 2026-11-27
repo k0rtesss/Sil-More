@@ -2435,6 +2435,14 @@ int oath_menu(int* highlight)
     return oath_menu(highlight);
 }
 
+typedef struct ability_browser_skill_tab
+{
+    char text[96];
+    int width;
+    int col;
+    int row;
+} ability_browser_skill_tab;
+
 typedef struct ability_browser_layout
 {
     int term_wid;
@@ -2455,6 +2463,9 @@ typedef struct ability_browser_layout
     int skill_col;
     int skill_w;
     int skill_divider_col;
+    int skill_tab_count;
+    bool skill_tabs_paged;
+    ability_browser_skill_tab skill_tabs[S_MAX];
     int ability_col;
     int ability_w;
     int ability_divider_col;
@@ -2672,8 +2683,118 @@ static int ability_browser_wrapped_rows(cptr text, int width)
     return MAX(rows, 1);
 }
 
+static cptr ability_browser_skill_trait_suffix(int skilltype)
+{
+    int score;
+
+    if (!p_ptr || !rp_ptr || !current_character_profile
+        || skilltype < 0 || skilltype >= S_MAX || skilltype == S_SPC)
+    {
+        return "";
+    }
+
+    score = affinity_level(skilltype);
+    if (score >= 2)
+        return "++";
+    if (score == 1)
+        return "+";
+    if (score == -1)
+        return "-";
+    if (score <= -2)
+        return "--";
+
+    return "";
+}
+
+static int ability_browser_build_skill_tokens(ability_browser_skill_tab tabs[],
+    int skill_options, int skill_cur, bool full_labels)
+{
+    int total_width = 0;
+
+    for (int skill = 0; skill < skill_options; skill++)
+    {
+        ability_browser_skill_tab* tab = &tabs[skill];
+        cptr label = ui_text(full_labels ? skill_names_full[skill]
+                                        : skill_names[skill]);
+        int bytes;
+        int cells;
+
+        strnfmt(tab->text, sizeof(tab->text),
+            skill == skill_cur ? "[%s%s]" : " %s%s ", label,
+            ability_browser_skill_trait_suffix(skill));
+        bytes = (int)strlen(tab->text);
+        cells = ability_browser_cell_width_n(tab->text, bytes);
+        /* Term stores UTF-8 bytes even when SDL renders fewer cells. */
+        tab->width = MAX(bytes, cells);
+        total_width += tab->width;
+    }
+
+    return total_width;
+}
+
+static void ability_browser_layout_skill_tabs(ability_browser_layout* layout,
+    int skill_options, int skill_cur, bool portrait)
+{
+    bool bigger = get_sdl_menu_bigger_font();
+    bool full_labels = portrait || layout->visible_w >= 78;
+    int heading_rows = (bigger && layout->term_hgt <= 18) ? 1 : 2;
+    /* Leave room for an ability (a wrapped card in the narrow big-font
+     * layout) plus the Information heading and at least one line of detail. */
+    int body_rows = (bigger && layout->visible_w < 55) ? 5 : 3;
+    int max_rows = portrait ? MAX(1, layout->prompt_row - layout->skill_row
+        - heading_rows - body_rows) : 1;
+    int row = 0;
+    int used = 0;
+    int total_width;
+
+    layout->skill_col = layout->visible_col;
+    layout->skill_w = layout->visible_w;
+    layout->skill_divider_col = -1;
+    layout->skill_tab_count = 0;
+    layout->skill_tabs_paged = false;
+
+    total_width = ability_browser_build_skill_tokens(layout->skill_tabs,
+        skill_options, skill_cur, full_labels);
+    if (!portrait && full_labels && total_width > layout->skill_w)
+    {
+        ability_browser_build_skill_tokens(layout->skill_tabs, skill_options,
+            skill_cur, false);
+    }
+
+    for (int skill = 0; skill < skill_options; skill++)
+    {
+        ability_browser_skill_tab* tab = &layout->skill_tabs[skill];
+
+        if (tab->width > layout->skill_w)
+            break;
+        if (used + tab->width > layout->skill_w)
+        {
+            if (row + 1 >= max_rows)
+                break;
+            row++;
+            used = 0;
+        }
+        tab->col = layout->skill_col + used;
+        tab->row = layout->skill_row + row;
+        used += tab->width;
+        layout->skill_tab_count++;
+    }
+
+    layout->skill_rows = row + 1;
+    if (layout->skill_tab_count < skill_options && (portrait || bigger))
+    {
+        layout->skill_rows = 1;
+        layout->skill_tabs_paged = true;
+        if (!portrait)
+        {
+            ability_browser_build_skill_tokens(layout->skill_tabs,
+                skill_options, skill_cur, true);
+        }
+    }
+}
+
 static void ability_browser_init_layout_normal(ability_browser_layout* layout,
-    int ability_count, cptr summary)
+    int ability_count, cptr summary, int skill_options, int skill_cur)
 {
     int min_ability_w = 28;
     int min_desc_w = 26;
@@ -2720,7 +2841,10 @@ static void ability_browser_init_layout_normal(ability_browser_layout* layout,
             ? layout->summary_row + 1
             : layout->summary_row;
     }
-    layout->skill_rows = (portrait && layout->term_hgt > 4) ? 2 : 1;
+    layout->prompt_row = layout->term_hgt - 1
+        - sdl_touch_menu_button_reserved_rows();
+    ability_browser_layout_skill_tabs(layout, skill_options, skill_cur,
+        portrait);
     layout->header_row = (layout->term_hgt
             > layout->skill_row + layout->skill_rows)
         ? layout->skill_row + layout->skill_rows
@@ -2729,8 +2853,6 @@ static void ability_browser_init_layout_normal(ability_browser_layout* layout,
         ? layout->header_row + 1
         : layout->header_row;
     layout->list_row = layout->divider_row + 1;
-    layout->prompt_row = layout->term_hgt - 1
-        - sdl_touch_menu_button_reserved_rows();
     if (layout->prompt_row < layout->list_row)
         layout->prompt_row = layout->list_row;
     /* The portrait summary and selected ability row already contain the
@@ -2754,9 +2876,6 @@ static void ability_browser_init_layout_normal(ability_browser_layout* layout,
     if (ability_w < min_ability_w)
         ability_w = min_ability_w;
 
-    layout->skill_col = layout->visible_col;
-    layout->skill_w = layout->visible_w;
-    layout->skill_divider_col = -1;
     layout->ability_col = layout->visible_col;
     layout->ability_w = ability_w;
     layout->ability_divider_col = layout->ability_col + layout->ability_w + 1;
@@ -2805,10 +2924,11 @@ static void ability_browser_init_layout_normal(ability_browser_layout* layout,
 }
 
 static void ability_browser_init_layout(ability_browser_layout* layout,
-    int ability_count, cptr summary)
+    int ability_count, cptr summary, int skill_options, int skill_cur)
 {
     if (!get_sdl_menu_bigger_font()) {
-        ability_browser_init_layout_normal(layout, ability_count, summary);
+        ability_browser_init_layout_normal(layout, ability_count, summary,
+            skill_options, skill_cur);
         return;
     }
     int min_ability_w = 28;
@@ -2856,8 +2976,10 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
             ? layout->summary_row + 1
             : layout->summary_row;
     }
-    layout->skill_rows = (portrait && layout->term_hgt > 18
-        && layout->visible_w >= 60) ? 2 : 1;
+    layout->prompt_row = layout->term_hgt - 1
+        - sdl_touch_menu_button_reserved_rows();
+    ability_browser_layout_skill_tabs(layout, skill_options, skill_cur,
+        portrait);
     layout->header_row = (layout->term_hgt
             > layout->skill_row + layout->skill_rows)
         ? layout->skill_row + layout->skill_rows
@@ -2868,8 +2990,6 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
     if (layout->term_hgt <= 18)
         layout->divider_row = layout->header_row;
     layout->list_row = layout->divider_row + 1;
-    layout->prompt_row = layout->term_hgt - 1
-        - sdl_touch_menu_button_reserved_rows();
     if (layout->prompt_row < layout->list_row)
         layout->prompt_row = layout->list_row;
     /* The compact summary and selected ability card already contain the
@@ -2894,9 +3014,6 @@ static void ability_browser_init_layout(ability_browser_layout* layout,
     if (ability_w < min_ability_w)
         ability_w = min_ability_w;
 
-    layout->skill_col = layout->visible_col;
-    layout->skill_w = layout->visible_w;
-    layout->skill_divider_col = -1;
     layout->ability_col = layout->visible_col;
     layout->ability_w = ability_w;
     layout->ability_divider_col = layout->ability_col + layout->ability_w + 1;
@@ -3329,174 +3446,46 @@ static byte ability_browser_skill_attr(int skilltype, bool hovered)
     return hovered ? TERM_L_BLUE : ability_skill_color(skilltype);
 }
 
-static cptr ability_browser_skill_trait_suffix(int skilltype)
-{
-    int score;
-
-    if (!p_ptr || !rp_ptr || !current_character_profile
-        || skilltype < 0 || skilltype >= S_MAX || skilltype == S_SPC)
-    {
-        return "";
-    }
-
-    score = affinity_level(skilltype);
-    if (score >= 2)
-        return "++";
-    if (score == 1)
-        return "+";
-    if (score == -1)
-        return "-";
-    if (score <= -2)
-        return "--";
-
-    return "";
-}
-
-static void ability_browser_build_skill_tokens(int skill_options,
-    int skill_cur, bool full_labels, char tokens[][40], int token_widths[])
-{
-    for (int skill = 0; skill < skill_options; skill++)
-    {
-        cptr base_label = ui_text(full_labels ? skill_names_full[skill]
-                                      : skill_names[skill]);
-        cptr suffix = ability_browser_skill_trait_suffix(skill);
-        char label[32];
-
-        strnfmt(label, sizeof(label), "%s%s", base_label, suffix);
-        if (skill == skill_cur)
-            strnfmt(tokens[skill], 40, "[%s]", label);
-        else
-            strnfmt(tokens[skill], 40, " %s ", label);
-        token_widths[skill] = ability_browser_cell_width_n(tokens[skill],
-            (int)strlen(tokens[skill]));
-    }
-}
-
-static int ability_browser_skill_tab_split(const int token_widths[],
-    int skill_options)
-{
-    int total_width = 0;
-    int first_width = 0;
-    int best_split = MAX(1, skill_options / 2);
-    int best_max_width = 0x7fffffff;
-    int best_difference = 0x7fffffff;
-
-    if (skill_options < 2)
-        return skill_options;
-
-    for (int skill = 0; skill < skill_options; skill++)
-        total_width += token_widths[skill];
-
-    for (int split = 1; split < skill_options; split++)
-    {
-        int second_width;
-        int max_width;
-        int difference;
-
-        first_width += token_widths[split - 1];
-        second_width = total_width - first_width;
-        max_width = MAX(first_width, second_width);
-        difference = (first_width > second_width)
-            ? first_width - second_width
-            : second_width - first_width;
-
-        if (max_width < best_max_width
-            || (max_width == best_max_width
-                && difference < best_difference))
-        {
-            best_split = split;
-            best_max_width = max_width;
-            best_difference = difference;
-        }
-    }
-
-    return best_split;
-}
-
-static int ability_browser_skill_tab_width(const int token_widths[],
-    int skill_options, int split)
-{
-    int first_width = 0;
-    int second_width = 0;
-
-    for (int skill = 0; skill < skill_options; skill++)
-    {
-        if (skill < split)
-            first_width += token_widths[skill];
-        else
-            second_width += token_widths[skill];
-    }
-
-    return MAX(first_width, second_width);
-}
-
 static void ability_browser_draw_skill_summary(
     const ability_browser_layout* layout, int skill_options, int skill_cur,
     int skill_hover)
 {
-    char tokens[S_MAX][40];
-    int token_widths[S_MAX];
-    int end_col = layout->skill_col + layout->skill_w;
-    int split = skill_options;
-    bool full_labels = (layout->skill_rows > 1 || layout->skill_w >= 78);
     int col = layout->skill_col;
-    int tab_row = layout->skill_row;
+    int row = layout->skill_row;
 
-    ability_browser_build_skill_tokens(skill_options, skill_cur, full_labels,
-        tokens, token_widths);
-    if (layout->skill_rows > 1)
-        split = ability_browser_skill_tab_split(token_widths, skill_options);
-
-    if (ability_browser_skill_tab_width(token_widths, skill_options, split)
-        > layout->skill_w && full_labels)
+    for (int i = 0; i < layout->skill_rows; i++)
+        Term_erase(col, row + i, layout->skill_w);
+    if (layout->skill_tabs_paged)
     {
-        full_labels = false;
-        ability_browser_build_skill_tokens(skill_options, skill_cur,
-            full_labels, tokens, token_widths);
-        if (layout->skill_rows > 1)
-            split = ability_browser_skill_tab_split(token_widths,
-                skill_options);
-    }
+        const ability_browser_skill_tab* tab = &layout->skill_tabs[skill_cur];
+        int arrow_w = (skill_options > 1 && layout->skill_w >= 5) ? 2 : 0;
+        int label_w = layout->skill_w - 2 * arrow_w;
 
-    for (int row = 0; row < layout->skill_rows; row++)
-        Term_erase(layout->skill_col, tab_row + row, layout->skill_w);
-    if (get_sdl_menu_bigger_font()
-        && ability_browser_skill_tab_width(token_widths, skill_options, split)
-            > layout->skill_w)
-    {
-        char label[48];
-        int previous = (skill_cur + skill_options - 1) % skill_options;
-        int next = (skill_cur + 1) % skill_options;
-        ability_browser_build_skill_tokens(skill_options, skill_cur, true,
-            tokens, token_widths);
-        strnfmt(label, sizeof(label), "< %s >", tokens[skill_cur]);
-        ability_browser_put_fitted(layout->skill_col, tab_row,
-            layout->skill_w, TERM_L_BLUE, label);
-        ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + previous,
-            layout->skill_col, tab_row, 2);
-        ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + next,
-            layout->skill_col + (int)strlen(label) - 2, tab_row, 2);
+        ability_browser_put_fitted(col + arrow_w, row, label_w, TERM_L_BLUE,
+            tab->text);
+        if (arrow_w)
+        {
+            int previous = (skill_cur + skill_options - 1) % skill_options;
+            int next = (skill_cur + 1) % skill_options;
+            int next_col = col + arrow_w + MIN(label_w, tab->width);
+
+            Term_putstr(col, row, arrow_w, TERM_L_BLUE, "< ");
+            Term_putstr(next_col, row, arrow_w, TERM_L_BLUE, " >");
+            ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + previous,
+                col, row, arrow_w);
+            ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + next,
+                next_col, row, arrow_w);
+        }
         return;
     }
-    for (int skill = 0; skill < skill_options; skill++)
+    for (int skill = 0; skill < layout->skill_tab_count; skill++)
     {
-        bool hovered = (skill == skill_hover);
-        byte attr = ability_browser_skill_attr(skill, hovered);
-        int token_len = (int)strlen(tokens[skill]);
+        const ability_browser_skill_tab* tab = &layout->skill_tabs[skill];
+        byte attr = ability_browser_skill_attr(skill, skill == skill_hover);
 
-        if (layout->skill_rows > 1 && skill == split)
-        {
-            tab_row++;
-            col = layout->skill_col;
-        }
-
-        if (col + token_widths[skill] > end_col)
-            break;
-
-        Term_putstr(col, tab_row, token_len, attr, tokens[skill]);
+        Term_putstr(tab->col, tab->row, -1, attr, tab->text);
         ui_menu_click_add(ABILITY_MENU_CLICK_SKILL_BASE + skill,
-            col, tab_row, token_widths[skill]);
-        col += token_widths[skill];
+            tab->col, tab->row, tab->width);
     }
 }
 
@@ -6242,7 +6231,8 @@ void do_cmd_ability_screen(void)
         entry_count = ability_browser_collect_entries(skilltype, entries,
             ABILITIES_MAX);
         ability_browser_build_summary(skilltype, summary, sizeof(summary));
-        ability_browser_init_layout(&layout, entry_count, summary);
+        ability_browser_init_layout(&layout, entry_count, summary,
+            skill_options, skill_cur);
         ability_browser_size_entry_cards(&layout, entries, entry_count);
         ability_visible_entries = MAX(1, layout.ability_rows
             / MAX(layout.ability_entry_rows, 1));

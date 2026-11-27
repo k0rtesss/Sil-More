@@ -48,14 +48,17 @@ parts += [function(knowledge,x) for x in ['static void knowledge_init_layout(',
     'static byte supply_browser_page_tab_attr(', 'static bool supply_page_header_uses_wrapped_title(',
     'static bool supply_page_tabs_need_paging(', 'static void supply_draw_page_header(',
     'static int supply_browser_page_click_choice(', 'static void supply_register_page_tabs(']]
-parts += [function(abilities,x) for x in ['static void ability_browser_init_layout_normal(',
+parts += [function(abilities,x) for x in ['static cptr ability_browser_skill_trait_suffix(',
+    'static int ability_browser_build_skill_tokens(',
+    'static void ability_browser_layout_skill_tabs(',
+    'static void ability_browser_init_layout_normal(',
     'static void ability_browser_init_layout(',
-    'static int ability_browser_skill_tab_split(', 'static int ability_browser_skill_tab_width(',
     'static void ability_browser_draw_skill_summary(']]
 parts += [function(smithing,x) for x in ['static int smith_ui_content_bottom_row(',
     'static smith_sheet_layout smith_sheet_geometry(']]
 types=declaration('src/cmd/ui/cmd-ui-internal.h',r'struct knowledge_browser_layout\s*\{.*?\};')
 types+='\ntypedef struct knowledge_browser_layout knowledge_browser_layout;\n'
+types+=declaration(abilities,r'typedef struct ability_browser_skill_tab\s*\{.*?\} ability_browser_skill_tab;')
 types+=declaration(abilities,r'typedef struct ability_browser_layout\s*\{.*?\} ability_browser_layout;')
 types+='\n'+declaration(smithing,r'typedef struct \{\s*int width, margin, tabs, body, footer;.*?\} smith_sheet_layout;')
 harness=r"""
@@ -78,7 +81,8 @@ typedef const char *cptr;typedef unsigned char byte;
 #define TERM_L_WHITE 4
 #define TERM_SHADE 16
 #define SDL_AUX_VIEW_FONT_MIN 10
-#define S_MAX 8
+#define S_MAX 9
+#define S_SPC 8
 #define ABILITY_MENU_CLICK_SKILL_BASE 200
 #define SUPPLY_CLICK_CATEGORY_RETURN (-16)
 #define SUPPLY_CLICK_ENTRY_BASE 10000
@@ -140,12 +144,13 @@ static int inv_entry_cur,inv_entry_top,inv_grp_cur,inv_grp_top,inv_column;
 static int *drag_offset,drag_max;
 static int strnfmt(char *s,size_t n,cptr f,...) {va_list a;va_start(a,f);int r=vsnprintf(s,n,f,a);va_end(a);return r;}
 static void strnfcat(char *s,size_t n,size_t *used,cptr f,...) {va_list a;va_start(a,f);vsnprintf(s+*used,n-*used,f,a);va_end(a);*used=strlen(s);}
+static cptr ui_text(cptr text) {return text;}
 static void Term_get_size(int *w,int *h) {if(w)*w=Term->wid;if(h)*h=Term->hgt;}
 static void Term_clear(void) {memset(screen,0,sizeof(screen));clicks=0;}
 static void Term_erase(int x,int y,int n) {assert(y>=0&&y<Term->hgt);}
 static void Term_putstr(int x,int y,int n,int attr,cptr s) {
  assert(x>=0&&x<Term->wid&&y>=0&&y<Term->hgt);
- int count=MIN((int)strlen(s),n);assert(count<=Term->wid-x);
+ int count=(int)strlen(s);if(n>=0)count=MIN(count,n);assert(count<=Term->wid-x);
  memcpy(screen[y]+x,s,count);
 }
 static void supply_put_fitted(int x,int y,int w,byte a,cptr text) {Term_putstr(x,y,MIN(w,(int)strlen(text)),a,text);}
@@ -159,10 +164,12 @@ static bool insight_system_enabled(void) {return insight;}
 static int ability_browser_wrapped_rows(cptr s,int w) {return MAX(1,((int)strlen(s)+w-1)/w);}
 static byte ability_browser_skill_attr(int skill,bool hover) {return 1;}
 static int ability_browser_tab_skill(int skill) {return skill;}
-static cptr skills[]={"Melee","Archery","Evasion","Stealth","Perception","Will","Smithing","Song","Insight"};
-static void ability_browser_build_skill_tokens(int count,int current,bool full,char tokens[][40],int widths[]) {
- for(int i=0;i<count;i++){strnfmt(tokens[i],40,i==current?"[%s]":" %s ",skills[i]);widths[i]=(int)strlen(tokens[i])+1;}
-}
+static cptr skill_names_full[S_MAX]={"Melee","Archery","Evasion","Stealth","Perception","Will","Smithing","Song","Special"};
+static cptr skill_names[S_MAX]={"Mel","Arc","Evn","Stl","Per","Wil","Cmt","Sng","Spc"};
+static const int traits[S_MAX]={2,0,0,-1,2,2,2,0,0};
+static const void *p_ptr=traits,*rp_ptr=traits,*current_character_profile=traits;
+static int affinity_level(int skill) {return traits[skill];}
+static int ability_browser_cell_width_n(cptr text,int bytes) {return bytes;}
 static void ability_browser_put_fitted(int x,int y,int w,byte a,cptr s) {supply_put_fitted(x,y,w,a,s);}
 static bool sdl_touch_only_device_active(void) {return touch;}
 static bool ui_scroll_area_take_touch_scrolled(void) {return false;}
@@ -307,14 +314,38 @@ int main(void) {
     assert(ids[1]==100+supply_browser_turn_page(page,1));
    }else assert(clicks==4);
   }
-  ability_browser_layout a;ability_browser_init_layout(&a,19,"A long skill summary that must not consume the body viewport");
+  ability_browser_layout a;ability_browser_init_layout(&a,19,"A long skill summary that must not consume the body viewport",8,7);
   assert(a.ability_rows>=1&&a.desc_rows>=1);
   assert(a.ability_col+a.ability_w<=Term->wid&&a.desc_col+a.desc_w<=Term->wid);
   assert(a.desc_row+a.desc_rows<=a.status_row&&a.prompt_row<Term->hgt-reserved_rows);
   if(Term->hgt<=18)assert(a.summary_rows==1&&a.skill_rows==1);
   if(Term->wid<60)assert(a.stacked);
   Term_clear();ability_browser_draw_skill_summary(&a,8,7,-1);
-  if(Term->wid<60)assert(clicks==2&&strstr(screen[a.skill_row],"Song"));
+  if(c==0)assert(clicks==2&&strstr(screen[a.skill_row],"Song"));
+  if(portrait&&c>0)assert(clicks==8&&a.skill_rows>=3);
+ }
+ /* The portrait grid from the Android report, with all nine skills and
+  * the same affinity marks. Each wrapped label keeps its own touch target. */
+ const char *portrait_labels[S_MAX]={"Melee++","Archery","Evasion","Stealth-",
+  "Perception++","Will++","Smithing++","Song","Special"};
+ Term->wid=45;Term->hgt=46;portrait=true;
+ for(int mode=0;mode<2;mode++){
+  config.bigger_font=mode;
+  for(int current=0;current<S_MAX;current++){
+   ability_browser_layout a;
+   ability_browser_init_layout(&a,19,"XP 4505 | Melee base 5, current 13 | next skill +1: 600 XP | ability price 0 XP",S_MAX,current);
+   assert(a.skill_rows==3&&a.skill_row+a.skill_rows==a.header_row);
+   assert(a.header_row<a.ability_row&&a.desc_row+a.desc_rows<=a.prompt_row);
+   Term_clear();ability_browser_draw_skill_summary(&a,S_MAX,current,-1);
+   assert(clicks==S_MAX);
+   for(int i=0;i<S_MAX;i++){
+    int x=hit_rects[i].x,y=hit_rects[i].y;
+    assert(y>=a.skill_row&&y<a.header_row);
+    assert(fixture_click_at(x+1,y)==ABILITY_MENU_CLICK_SKILL_BASE+i);
+    assert(!strncmp(screen[y]+x+1,portrait_labels[i],strlen(portrait_labels[i])));
+    if(i==current)assert(screen[y][x]=='['&&screen[y][x+hit_rects[i].w-1]==']');
+   }
+  }
  }
  /* Pointer input uses production entry routing, then the real two-row
   * Categories target restores the strip without resetting its selection/scroll.

@@ -2872,7 +2872,7 @@
     "quest.5": {
       "title": "Oromë, der große Jäger",
       "steps": [
-        "{detail} Bei der Jagd werden Wölfe, Spinnen, Schlangen und Vampire getrennt gezählt. Unter „Quests“ siehst du jeden aktuellen Stand. Zusätzliche Beute einer Gruppe erfüllt nicht die Vorgabe einer anderen."
+        "{detail} Bei der Jagd werden getötete Wölfe, Spinnen, Schlangen und Vampire getrennt gezählt. Unter „Quests“ siehst du den aktuellen Stand jeder Gruppe. Zusätzliche getötete Kreaturen in einer Gruppe zählen für keine andere."
       ],
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },

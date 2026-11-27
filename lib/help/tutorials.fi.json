@@ -410,7 +410,7 @@
       "source_sha256": "8d58c7eb4486bb4e5e87df5c41298c08dd3dce15f08ecb42fd5e3f2d4c2985ab"
     },
     "status.stun": {
-      "title": "Tainnutus",
+      "title": "Pökerrys",
       "steps": [
         "{detail} Pökerrys alentaa jokaista taitoa 2 pistettä tai 4 pistettä, kun vakavuus on vähintään 50. Kun arvo ylittää 100, menetät tajuntasi etkä voi toimia. Clarity tai Miruvor poistaa pökerryksen. Käytä sitä ajoissa."
       ],
@@ -447,7 +447,7 @@
     "status.entranced": {
       "title": "Transsi",
       "steps": [
-        "Olet horroksessa etkä voi toimia ennen sen päättymistä. Et voi valita tai juoda parannuskeinoa horroksessa. Jatka sulkee selityksen ja palauttaa peliin."
+        "Olet transsissa etkä voi toimia ennen kuin se päättyy. Et voi valita tai juoda lääkettä transsin aikana. ”Jatka” sulkee selityksen ja palauttaa sinut peliin."
       ],
       "source_sha256": "2487d8d8462bf8e80d186741b4f61cd18b18a05a37b097bec81310feb13d9d63"
     },
@@ -1576,7 +1576,7 @@
     "ability.149.preview": {
       "title": "Surman laulu (Song of Slaying)",
       "steps": [
-        "Kriittinen lähitaistelu, joka osuu, tappaa kohteen, jos kohteen terveys on enintään kaksi kertaa oman hyökkäyksesi arvoa. Osuman on oltava kriittinen; tavalliset osumat eivät aiheuta tätä vaikutusta."
+        "Kriittinen lähitaisteluosuma surmaa kohteen, jos sen terveys on enintään kaksi kertaa käytössä oleva lauluarvosi. Tavalliset osumat eivät laukaise vaikutusta."
       ],
       "source_sha256": "ec38d6c4fe2ef2ae8ccd79e5efa914047ae4a5f7a129df88fa38d5b71ec081c7"
     },
@@ -2150,7 +2150,7 @@
     "terrain.82": {
       "title": "Kuilu ylöspäin",
       "steps": [
-        "Yläkäytävä voi nousta korkeammalle kuin tavallinen portaikko, mutta minimisyvyys voi jättää sinut samaan syvyyteen tai jopa syvemmälle. Sitten sovellettavat säännöt. Lue kohde ennen lähtöä; kartta on luotu uudelleen."
+        "Ylöspäin johtava kuilu voi viedä tavallisia portaita ylemmäs, mutta vähimmäissyvyys voi pitää sinut samalla syvyydellä tai viedä sinut syvemmälle. Valan rajoitukset ovat edelleen voimassa. Tarkista määränpää ennen lähtöä. Uudella tasolla luodaan uusi kartta."
       ],
       "source_sha256": "611a70f61c0926db1e59742dbcf4019915ec55ee23de71386f11bc936ae20033"
     },
@@ -2473,7 +2473,7 @@
     "effect.382": {
       "title": "Kauhu — tunnettu vaikutus",
       "steps": [
-        "Jos pelastus ei estä vaikutusta, se aiheuttaa pelkoa 10d4 kierroksen ajan ja hidastumista 5d4 kierroksen ajan. Pelastuksen käyttäminen estää myös tämän hidastumisen hyödyn. Se tarjoaa tavallista yrttien ravintoa. Jos tämä on nykyisen sairauden hoito, se parantaa sairauden ja palauttaa sen vaikutukset sen sijaan, että se aiheuttaisi normaalin vaikutuksen tai ravintoa; muuten, se toimii normaalisti."
+        "Jos suojasi ei torju pelkoa, kärsit pelosta 10d4 vuoron ajan ja nopeutesi kasvaa 5d4 vuoron ajaksi. Pelon torjuminen estää myös nopeusbonuksen. Yrtti antaa tavallisen määrän ravintoa. Jos yrtti on nykyisen tautisi parannuskeino, se parantaa taudin ja poistaa sen aiheuttamat ominaisuushaitat tavallisen vaikutuksen ja ravinnon sijasta. Muulloin yrtti toimii tavalliseen tapaan."
       ],
       "source_sha256": "5b77dbfdeeef100f3f8328f96e08cdb72200ab12abb9767e2154fa08863e8094"
     },
@@ -2606,21 +2606,21 @@
     "storage.pack": {
       "title": "Tavaroiden säilytys repussa",
       "steps": [
-        "{detail} Repussa on oma painoraja. Paino vaikuttaa myös kokonaiskuormaan. Lue molemmat rajat valitessasi, mitä kannat – pieni mutta painava esine ja suuri, kevyt esine luovat erilaisia rajoituksia."
+        "{detail} Repulla on oma tilavuusrajansa. Tavaroiden paino lasketaan mukaan kokonaiskuormaan. Huomioi molemmat rajat tavaroita valitessasi. Pieni painava esine lisää kuormaa, kun taas kookas kevyt esine vie reilusti tilaa."
       ],
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
       "title": "Varustevyön tilavuus",
       "steps": [
-        "{detail} Varustevyöllä on oma, erillinen kantokyky, joka on erillinen repun kantokyvystä. Valmisteltu varuste voidaan ottaa käyttöön omilla säännöillä. Esineen siirtäminen säilytyspaikoista ei lisää kokonaista kantokykyä."
+        "{detail} Varustevyöllä on oma tilavuusrajansa, joka on erillinen repun tilavuusrajasta. Käyttövalmiiden varusteiden ottamiseen sovelletaan omia toimintasääntöjä. Kokonaiskuorman raja pätee myös, kun siirrät tavaroita säilytyspaikasta toiseen."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
     "storage.quiver": {
       "title": "Nuoliviinen tilavuus",
       "steps": [
-        "{detail} Nuoliviini sisältää nuolia sen oman kapasiteettinsa mukaisesti. Liikaa nuolia voi tarvita reppuun. Yksittäinen nuoli voidaan ottaa vain osittain, jos vain osa mahtuu; tarkista, kuinka monta nuolta todella on kerätty."
+        "{detail} Nuoliviineen mahtuu rajallinen määrä nuolia. Ylimääräiset nuolet saattavat viedä tilaa repussa. Voit poimia osan nuolipinosta, kun koko pino ei mahdu. Tarkista, montako nuolta sait talteen."
       ],
       "source_sha256": "2901f8607c5fd29a7981ace679d30d65bec33cc9a7dd2ee160cf5d5901a7d403"
     },
@@ -2641,14 +2641,14 @@
     "storage.pack_interrupted": {
       "title": "Repun käyttö keskeytyi",
       "steps": [
-        "Hyökkäys keskeytti pakin toiminnan ennen kuin se oli valmis. Tarkista esineen nykyinen sijainti ja viestihistoria. Sinun on ehkä siirrettävä itsesi pois vaarasta ennen kuin yrität uudelleen."
+        "Hyökkäys keskeytti repun käytön. Tarkista, missä esine nyt on, ja lue viestihistoria. Saatat joutua siirtymään turvaan ennen kuin yrität uudelleen."
       ],
       "source_sha256": "61323a01ebeb2584613eb833876bb048ed0ffdec5a8c84817e70dcd5c5098565"
     },
     "storage.partial_pickup": {
       "title": "Vain osa pinosta mahtuu",
       "steps": [
-        "Vain osa varastosta mahtui käytettävissä olevaan tilaan. Tarkista, kuinka monta esinettä on kerätty ja mitkä esineet ovat vielä lattialla. Jos haluat ottaa enemmän, käytä vapaata tilaa tai valitse toinen varastointipaikka."
+        "Vain osa esinepinosta mahtui mukaan. Tarkista, montako esinettä poimit ja mitä jäi maahan. Vapauta tilaa tai valitse toinen säilytyspaikka, jos haluat ottaa enemmän."
       ],
       "source_sha256": "0fd1a7bb882e490e84224ed873a113e86fe8dde1b2335844098cc81e2b618929"
     },
@@ -2662,21 +2662,21 @@
     "world.run": {
       "title": "Juokseminen ja liikkeen toistaminen",
       "steps": [
-        "Liikkuminen toistetaan, kunnes lopetat sen tai jokin häiritsee. Viholliset ja minimisyvyystimeri jatkavat toimintaansa jokaisen vaiheen välillä. Jokainen vaihe vie aikaa; tarkista reittisi ennen kuin aloitat tai jatkat liikkumista."
+        "Juokseminen toistaa askeleita, kunnes pysäytät juoksun tai jokin keskeyttää sen. Viholliset voivat toimia askelten välissä, ja vähimmäissyvyyden laskuri käy. Jokainen askel vie aikaa. Tarkista reitti ennen kuin lähdet tai jatkat juoksemista."
       ],
       "source_sha256": "2bbe07516ae420b7d6ee1e287ea4b0a7d6f4024bf739db16b8e436fca72ce995"
     },
     "world.trap": {
       "title": "Tunnettu ansa",
       "steps": [
-        "Olet löytänyt ansaan. Sen havaitseminen ei poista sitä. Valitse reitti sen ohi, tutki \"Poista ansa\" -vaihtoehtoa ja sen riskiä, tai käytä laillista hyppyä, jos hahmollasi on \"Hyppy\" -kyky. Jos ansa on jo aktivoitunut, tarkista terveys- ja muut olosuhteet ennen toiminnan aloittamista. Valikossa: Disarm."
+        "Olet löytänyt ansan. Havaittu ansa on edelleen toiminnassa. Kierrä ansa, tarkista ”Pura ansa” -toiminto ja sen riski tai hyppää ansan yli, jos sinulla on Hyppy-kyky ja hyppy onnistuu siinä kohdassa. Jos ansa on jo lauennut, tarkista terveytesi ja tilavaikutukset ennen kuin toimit."
       ],
       "source_sha256": "d736a4fbda85cbff7b263fbacd3afb7a4d62740a39ffd513a2f8ba153094689d"
     },
     "world.forge": {
-      "title": "Ahjon äärellä",
+      "title": "Pajalla",
       "steps": [
-        "Tölyllä on rajalliset käyttötarkoitukset. Avaa \"Metallinvalmistus\" -toiminto, jotta voit tarkastella mahdollisia esineitä ja niiden hintoja. Esikatselu näyttää vaikeustason, materiaalit, ajan ja tölyn käytön ennen päätöksen tekemistä. Kulunut töly ei pysty valmistamaan uutta esinettä."
+        "Pajassa on rajallinen määrä latauksia. Avaa Taonta pajalla, niin näet, mitä voit valmistaa ja mitä se maksaa. Esikatselu näyttää vaikeuden, materiaalit, ajan ja tarvittavat pajalataukset ennen hyväksymistä. Jos lataukset ovat lopussa, pajalla ei voi valmistaa lisää esineitä."
       ],
       "source_sha256": "bfad51b7c10cba58b6c689df417a9a2593120603b70bcb227b89f338f4f25828"
     },
@@ -2711,7 +2711,7 @@
     "quest.progress": {
       "title": "Tehtävä etenee",
       "steps": [
-        "{detail} Tarkista \"Tehtävät\" saadaksesi tiedon jäljellä olevasta tavoitteesta ja mahdollisista rajoituksista. Tavoitteen saavuttaminen voi edelleen vaatia myöhemmän vierailun palkkion noutamiseksi. Valikossa: Quests."
+        "{detail} Katso Tehtävät-valikosta jäljellä oleva tavoite ja mahdolliset rajoitukset. Tavoitteen saavuttamisen jälkeen saatat joutua palaamaan noutamaan palkkion."
       ],
       "source_sha256": "f01b40c27b5554bae219cbd79a200bc253080620dbd7c9973fcb8c36919bcf5e"
     },
@@ -2753,7 +2753,7 @@
     "tale.silmaril": {
       "title": "Silmaril",
       "steps": [
-        "{detail} Olet saavuttanut Silmarilin. Tarkista päätehtävä ja suunnittele pakoreitti Angbandista. Sinun on edelleen päästävä pintaan, jotta pakoreissu onnistuu."
+        "{detail} Sait Silmarilin haltuusi. Tarkista päätehtävä ja suunnittele pakoreitti Angbandista. Pako onnistuu vasta, kun pääset Silmarilin kanssa maan pinnalle."
       ],
       "source_sha256": "9f8860d7b3bbac6bd37d1f6987650c9b04437d1da18b5ffcc0c6d90d1ea89cd1"
     },
@@ -2802,14 +2802,14 @@
     "world.partition.4": {
       "title": "Labyrintti",
       "steps": [
-        "{detail} Labrintit sisältävät kapeita, mutkittevia käytäviä. Käytä karttaa seuraamaan risteyksiä ja löytämään reitti takaisin. Löydät pääasiassa koruja ja tarvikkeita, kuten sormuksia, loitsuja ja velhojen keppejä, sekä harvoin aseita tai panssareita."
+        "{detail} Labyrinteissa on kapeita, mutkittelevia käytäviä. Pidä kirjaa risteyksistä ja paluureitistä kartan avulla. Saaliiksi löytyy etenkin koruja ja tarvikkeita, kuten sormuksia, juomia ja sauvoja. Aseet ja haarniskat ovat harvinaisia."
       ],
       "source_sha256": "6a8e92396417cc8516de5c98afb86fa631b33d6090abdb369bfbb9ccbd64eaee"
     },
     "world.partition.5": {
       "title": "Kuilujen alue",
       "steps": [
-        "{detail} Syvät kuopat jakavat tämän alueen. Putoaminen voi vahingoittaa sinua ja viedä sinut syvemmälle. Tarkista jokainen ylitys ja tarvittava hyppy ennen liikkumista. \"Katso\" ympäristöä ja etsi pudonneita esineitä reunojen läheltä, mutta vältä taistelua kapeilla siltoilla. Tähtijallusta voi löytyä sopivilla syvyyksillä."
+        "{detail} Kuilut jakavat alueen osiin. Putoaminen voi vahingoittaa sinua ja viedä sinut syvemmälle. Tarkista ylityspaikat ja hypyn vaatimukset ennen liikkumista. Etsi kuilujen reunoilta pudonneita varusteita ja vältä taistelua kapeilla silloilla. Sopivalla syvyydellä voi löytyä tähtirautaa."
       ],
       "source_sha256": "1ac7b78069c279252a1a8b8e273296b94accf2744fda7cc7e91304bd5deb03a2"
     },
@@ -2844,42 +2844,42 @@
     "quest.1": {
       "title": "Tulkas Väkevä",
       "steps": [
-        "{detail} Tapaa \"Tehtävät\"-osiossa mainittu olento, ja palaa sitten Tulkasiin saadaksesi palkinnon. Tarkista kohdeolennon oppimat hyökkäykset ennen kuin kohtaat sen. Valikossa: Quests."
+        "{detail} Surmaa Tehtävät-valikossa nimetty olento ja palaa sitten Tulkasin luo noutamaan palkkiosi. Tarkista kohteen tunnetut hyökkäykset ennen kuin kohtaat sen."
       ],
       "source_sha256": "122273fe7ed2b38312b361b2f5607c8b838595b2cc4905172a1b8532c3d6f2ad"
     },
     "quest.2": {
       "title": "Aulë Seppä",
       "steps": [
-        "{detail} Luo työtä, joka täyttää Aulén nykyiset vaatimukset, ja kerää sitten palkkio. Lue tavoite ja työn valmistus ehdotus ennen materiaalien käyttämistä. Jos jätät tämän tason ennen palkkion saamista, tehtävä hylätään."
+        "{detail} Tao esine, joka täyttää Aulën nykyiset vaatimukset, ja nouda sitten palkkiosi. Tarkista tavoite ja taontasuunnitelma ennen materiaalien käyttämistä. Jos poistut tältä tasolta ennen palkkion saamista, tehtävä raukeaa."
       ],
       "source_sha256": "4a57218cb48c385ecaa5c1f64a58c52a285cfdfd9dec6591958f371a3a2295f5"
     },
     "quest.3": {
       "title": "Mandos Tuomari",
       "steps": [
-        "{detail} Noudata Mandosin tavoitetta sidotun henken suhteen, ja kerää sitten palkkio. Tarkista \"Tehtävät\" saadaksesi tarkemman tiedon. Jos jätät tämän tason ennen palkkion saamista, tehtävä peruutetaan. Valikossa: Quests."
+        "{detail} Vapauta sidottu henki Mandosin ohjeiden mukaan ja nouda sitten palkkiosi. Tarkista tarkka kohde Tehtävät-valikosta. Jos poistut tältä tasolta ennen palkkion saamista, tehtävä raukeaa."
       ],
       "source_sha256": "a5e15e78f02946cbd295ae422bad111088902f615f8033c7085d13be31677443"
     },
     "quest.4": {
       "title": "Nienna, säälin valtiatar",
       "steps": [
-        "{detail} Etsi alas menevä portaita ilman, että joku kuolee, ja noudata palkinnon ohjeita ennen kuin poistut. Vältä vaikutuksia, jotka voivat aiheuttaa kuoleman, mukaan lukien automaattiset jatkohyökkäykset. Palkinnon saamisen edellä tasosta poistuminen hylkää tämän haasteen."
+        "{detail} Etsi alaspäin johtavat portaat tappamatta ketään. Noudata sitten palkinnon ohjeita ennen poistumista. Vältä kuolettavia vaikutuksia, kuten automaattisia jatkohyökkäyksiä. Jos poistut tasolta ennen palkkion saamista, koe raukeaa."
       ],
       "source_sha256": "54fceb5f8fb865850d9e2c767b5fd0e8b2bc8fe8cc8f57cb3e7b881c304ebeea"
     },
     "quest.5": {
       "title": "Oromë, suuri metsästäjä",
       "steps": [
-        "{detail} \"Lohikäärmeen metsästys laskee susien, hämähäkkien, käärmeiden ja vampyyrien määrän erikseen. Tarkista jokaisen ryhmän kokonaismäärä osiossa \"Tehtävät\". Yhden ryhmän tappaminen ei täytä toisen ryhmän vaatimuksia. Valikossa: Quests."
+        "{detail} Jahdissa lasketaan sudet, hämähäkit, käärmeet ja vampyyrit erikseen. Tarkista kunkin ryhmän ajantasainen määrä Tehtävät-valikosta. Yhden ryhmän ylimääräiset kaadot eivät täytä toisen ryhmän vaatimusta."
       ],
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },
     "quest.6": {
       "title": "Varda, tähtien valtiatar",
       "steps": [
-        "{detail} Tarkista \"Tehtävät\" saadaksesi tiedon kohteesta. Vardan tehtävä on ensimmäisellä tasolla, jonka saavutat 500 jalan jälkeen; voitettava Duruin ennen kuin poistut tältä tasolta, muuten tehtävä epäonnistuu. Suunnittele laskeutuminen ennen kuin aloitat, tuntemattomat alueet pysyvät tuntemattomina. Valikossa: Quests."
+        "{detail} Katso paljastettu määränpää Tehtävät-valikosta. Vardan koe on ensimmäisellä tasolla, jonka saavutat yli 500 jalan syvyydessä. Surmaa Duruin ennen kuin poistut tältä tasolta, tai tehtävä epäonnistuu. Suunnittele laskeutumisesi ennen tasolle saapumista. Tutkimattomat paikat pysyvät tuntemattomina."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3411,7 +3411,7 @@
     "monster.rf4_sng_oaths": {
       "title": "Vihollisen valalaulu",
       "steps": [
-        "Tämän vihollisen \"Vakojen laulu\" voi kutsua esiin \"Vakoja\". Sen laulamisen jatkaminen voi lisätä lisää vastustajia. \"Hiljaisuuden laulu\" heikentää kutsuvan laulun vaikutusta."
+        "Vihollisen valalaulu voi kutsua esiin valahaamuja. Jos vihollinen jatkaa laulua, saat lisää takaa-ajajia. Hiljaisuuden laulu heikentää kutsua."
       ],
       "source_sha256": "3e4461156bb9b54750ff75d3fd8d545e635a5db81aba2f4a1ad604276b0a074a"
     },
@@ -3698,7 +3698,7 @@
     "status.smithing": {
       "title": "Taonta käynnissä",
       "steps": [
-        "Metallinvalmistus on käynnissä. Työ jatkuu ehdottoman ehdoin. Jos työ keskeytyy, tarkista keskeytetty työ ja jäljellä olevat kustannukset ennen työn jatkamista."
+        "Taonta on käynnissä. Työ kestää hyväksytyssä työsuunnitelmassa ilmoitetun ajan. Jos työ keskeytyy, tarkista keskeneräinen työ ja jäljellä olevat kustannukset ennen jatkamista."
       ],
       "source_sha256": "77a74ef2527822b1ed23a48d5853f9ea076cc8ed4ca3e1beab17678cbcca024d"
     },
@@ -3949,7 +3949,7 @@
     "Select the item, then choose Ready.": "Valitse esine ja sitten ”Siirrä varustevyöhön” (Move to Harness).",
     "Select the equipment you want to wear or wield.": "Valitse varuste, jonka haluat pukea tai ottaa käteen.",
     "Select an item to preview.": "Valitse tutkittava esine.",
-    "Select the required item and choose Use.": "Valitse pyydetty esine ja sitten Use.",
+    "Select the required item and choose Use.": "Valitse tarvittava esine ja sitten ”Käytä”.",
     "Choose a Throwing row, then confirm the change.": "Valitse Throwing-rivi ja vahvista vaihto.",
     "Make the requested selection in the open menu.": "Tee pyydetty valinta avoimessa valikossa.",
     "Throw active weapon": "Heitä aktiivinen ase",
@@ -4075,7 +4075,7 @@
     "Stun %d: %+d to every skill.": "Tainnutus %d: kaikkiin taitoihin %+d.",
     "%s drain changed from %d to %d. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.": "%s: ominaisuuden menetys muuttui arvosta %d arvoon %d. Ominaisuuden erittelyssä menetys näkyy erillään varustehaitoista ja päättyvistä bonuksista.",
     "Health: %d/%d. Read the last attack and its effects before acting again.": "Terveys: %d/%d. Tarkista edellinen hyökkäys ja sen vaikutukset ennen seuraavaa toimintoa.",
-    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Vähimmäissyvyys on nyt %d jalkaa. Pelitoimet vievät aikaa eteenpäin. Lukeminen ei kuluta peliaikaa.",
+    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Vähimmäissyvyys on nyt %d jalkaa. Pelitoiminnot kasvattavat vähimmäissyvyyttä ajan myötä. Lukeminen ei kuluta peliaikaa.",
     "Pack space: %d.%d/%d.%d qt.": "Repun tila: %d,%d/%d,%d qt.",
     "Harness space: %d.%d/%d.%d qt.": "Varustevyön tila: %d,%d/%d,%d qt.",
     "Arrows: %d. Current free Quiver space: %d.": "Nuolia: %d. Vapaita paikkoja nuoliviinessä: %d.",

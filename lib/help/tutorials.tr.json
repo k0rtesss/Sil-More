@@ -319,7 +319,7 @@
     "item.staff": {
       "title": "Büyü asaları",
       "steps": [
-        "Büyü asaları bilinen etkilerini kullanmak için yük harcar. Çabuk ulaşabilmek için asayı teçhizat kemerinde hazırla. Sırt çantasındaki asayı kullanmak ek zaman alır. Kullanmadan önce etkisine ve kalan yüklerine bak. Açıklamayı okumak yük harcamaz."
+        "Büyü asaları, etkilerini göstermek için yük harcar. Asaya çabuk ulaşmak için onu Taşıma kayışı bölümünde hazırla. Sırt çantasından asa kullanmak ek zaman alır. Kullanmadan önce etkisine ve kalan yük sayısına bak. Açıklamayı okumak yük harcamaz."
       ],
       "source_sha256": "ffb0c70961d3a24aa91d7337dbff9a29ece2bb3afe3e879659651c9a794bc266"
     },
@@ -738,9 +738,9 @@
       "source_sha256": "61792c7c3c450fdc90a50e74195eda5b63c94c8e82ec84a57f95fb9f7aa60622"
     },
     "menu.songs": {
-      "title": "Şarkıler",
+      "title": "Şarkılar",
       "steps": [
-        "Etkisini ve kaç ses puanı harcadığını görmek için öğrendiğin bir şarkıyi seç. Şarkıye başlamak zaman alır. Söylemek zamanla ses puanı tüketir ve ses puanlarının yenilenmesini önler. Bu menüden şarkıyi durdurabilirsin. Bir yeminin şarkı söylemeyi yasaklayıp yasaklamadığını kontrol et."
+        "Etkisini ve gereken Ses puanını görmek için öğrendiğin bir şarkıyı seç. Şarkıya başlamak zaman alır. Söylerken Ses puanın azalır ve yenilenmez. Bu menüden şarkıyı durdurabilirsin. Şarkı söylemeyi yasaklayan bir yeminin olup olmadığını kontrol et."
       ],
       "source_sha256": "14638869ccd270b504f9935ba751a59994b3df8cd17a93883930f5c75368c5e2"
     },
@@ -768,7 +768,7 @@
     "menu.harness": {
       "title": "Teçhizat kemeri (Harness)",
       "steps": [
-        "Teçhizat kemeri, hacim sınırına kadar hazır teçhizat taşır. Uygun çanta eşyasında “Hazırla” (Ready) komutu eşyayı buraya taşır. “Çantaya kaldır” (Unready) eşyayı geri koyar. Hazır silahla normal şekilde saldırmak için ayrıca “Etkin silahı değiştir” (Change Active) menüsünde silahı seçmelisin."
+        "Teçhizat kemeri, kendi hacim sınırı içinde hemen kullanabileceğin eşyaları taşır. Sırt çantasındaki uygun bir eşyayı “Teçhizat kemerine aktar” komutuyla buraya, “Sırt çantasına koy” komutuyla çantaya taşıyabilirsin. Silahla normal şekilde saldırmak için silahı “Etkin silahı değiştir” menüsünde de seçmelisin."
       ],
       "source_sha256": "23cb4a9a0a6d5812faf908f8c385549e6e1636fbf5a3f609129d3a751eb9ae3f"
     },
@@ -817,7 +817,7 @@
     "menu.jewelry-sets": {
       "title": "Takı takımları",
       "steps": [
-        "Farklı durumlar için yüzük ve tılsım birleşimlerini kaydet. Seti kuşanmadan önce içindeki eşyalara ve önerilen değişikliklere bak. Eksik eşyalar, lanetler ve teçhizat değiştirme bedelleri yine geçerlidir."
+        "Farklı durumlar için yüzük ve muska düzenleri kaydet. Bir takımı kuşanmadan önce içindeki eşyalara ve değişecek takılara bak. Eksik eşyalar, lanetler ve teçhizat değiştirmenin zaman bedeli için olağan kurallar geçerlidir."
       ],
       "source_sha256": "f56e269e074b2bd5c655f4a79a340e5d38d19178a6cf7548a524ab251454fda7"
     },
@@ -899,9 +899,9 @@
       "source_sha256": "fa7fea72de262eb4a9b0e9b16c5ecdd29f0e03cb45b37863d1ec5d08c678274a"
     },
     "menu.look": {
-      "title": "Etrafa bak",
+      "title": "İncele",
       "steps": [
-        "“Etrafa bak” (Look) komutuyla bir tur harcamadan kareleri, eşyaları ve yaratıkları inceleyebilirsin. Tanımadığın bir araziye veya düşmana yaklaşmadan önce kullan. Hatırladığın arazi artık görüşünde olmasa da haritada görünebilir."
+        "“İncele” ile tur harcamadan kareleri, eşyaları ve yaratıkları inceleyebilirsin. Tanımadığın bir araziye veya düşmana yaklaşmadan önce kullan. Hatırladığın arazi artık görüşünde olmasa da haritada görünebilir."
       ],
       "source_sha256": "248cb97b6ea771a24a91219170babfa391757a487ad2b3cf4cef50f067a13bf4"
     },
@@ -2480,7 +2480,7 @@
     "effect.383": {
       "title": "İyileştirme — bilinen etki",
       "steps": [
-        "Hasta değilsen ot normal besinini verir, kanamayı yarıya indirir ve 11 artı azami canın aşağı yuvarlanmış %12’si kadar can yeniler. Tıbbi ekipman iyileştirmeyi artırır. Hastaysan bunun yerine her hastalığı, tanıdan önce bile iyileştirir ve hastalığın özellik kayıplarını giderir. Bu durumda yaraları iyileştirmez, kanamayı azaltmaz ve besin vermez. Angband Vebası’nı iyileştiren tek ottur. Şifa iksirleri ve Miruvor da vebayı iyileştirir."
+        "Hasta değilsen ot normal besinini verir, kanamayı yarıya indirir ve 11 artı azami canın aşağı yuvarlanmış %12’si kadar can yeniler. Tıbbi ekipman iyileştirmeyi artırır. Hastaysan bunun yerine her hastalığı, tanıdan önce bile iyileştirir ve hastalığın özellik kayıplarını giderir. Bu durumda yaraları iyileştirmez, kanamayı azaltmaz ve besin vermez. Angband Vebası’nı iyileştiren tek ottur. İyileştirme iksirleri ve Miruvor da vebayı iyileştirir."
       ],
       "source_sha256": "c842f0dcca620c50b19116bae3aff1bfebd980e2cda284a7fb6a75a3f15f3142"
     },
@@ -2522,7 +2522,7 @@
     "effect.389": {
       "title": "Hastalık — bilinen etki",
       "steps": [
-        "Normalde sağlıklı kişiye hastalık bulaştırabilir. Bulaşırsa Dayanıklılığın 1 azalır. İyileşene kadar her 150 oyuncu turunda rastgele bir özelliğin 1 azalır. Metanet varsa bu süre 300 turdur. Dinlenmek hastalığı iyileştirmez. İyileştirme otu, İyileştirme iksiri veya Miruvor her hastalığı iyileştirir. İyileşince hastalıktan kaybettiğin özellik puanları geri gelir. Ot normal besin değerini verir. Mevcut hastalığının ilacıysa yeni hastalık veya besin vermek yerine seni iyileştirir ve kaybettiğin özellik puanlarını geri kazandırır. Aksi hâlde normal etkisi geçerlidir."
+        "Normalde sağlıklı kişiye hastalık bulaştırabilir. Bulaşırsa Dayanıklılığın 1 azalır. İyileşene kadar her 150 oyuncu turunda rastgele bir özelliğin 1 azalır. Dirençlilik varsa bu süre 300 turdur. Dinlenmek hastalığı iyileştirmez. İyileştirme otu, İyileştirme iksiri veya Miruvor her hastalığı iyileştirir. İyileşince hastalıktan kaybettiğin özellik puanları geri gelir. Ot normal besin değerini verir. Mevcut hastalığının ilacıysa seni hastalandırmak veya besin vermek yerine hastalığını iyileştirir ve kaybettiğin özellik puanlarını geri kazandırır."
       ],
       "source_sha256": "1a36c79391b42d1d2638cd6767a512eb3c82dd50246dd4fe8ef6905e585cba05"
     },
@@ -2536,7 +2536,7 @@
     "effect.400": {
       "title": "Kurutulmuş Et Şeridi — bilinen etki",
       "steps": [
-        "Yaklaşık 2.000 normal tur yetecek besin verir ve hastalığa maruz kalma olasılığı temelde %20’dir. Hastalık bulaşırsa Dayanıklılığın 1 azalır. Ardından her 150 oyuncu turunda rastgele bir özelliğin 1 azalır. Metanet varsa bu süre 300 turdur. Dinlenmek hastalığı iyileştirmez. İyileştirme otu, İyileştirme iksiri veya Miruvor her hastalığı iyileştirir."
+        "Yaklaşık 2.000 normal tur yetecek besin verir. Hastalığa maruz kalmanın temel olasılığı %20’dir. Hastalık bulaşırsa Dayanıklılığın 1 azalır. Ardından her 150 oyuncu turunda rastgele bir özelliğin 1 azalır. Dirençlilik varsa bu süre 300 turdur. Dinlenmek hastalığı iyileştirmez. İyileştirme otu, İyileştirme iksiri veya Miruvor her hastalığı iyileştirir."
       ],
       "source_sha256": "60fb6ef370957c5bc80e489c5fc13dd8ee188e68604c3b1f8dd221f43c9335c1"
     },
@@ -2879,7 +2879,7 @@
     "quest.6": {
       "title": "Varda, Yıldızların Hanımı",
       "steps": [
-        "{detail} Açığa çıkan varış noktasına Görevler menüsünden bak. Varda’nın sınavı, 500 fitten sonra vardığın ilk katta gerçekleşir. Duruin’i bu kattan ayrılmadan öldürmezsen görevi kaybedersin. İnişini önceden planla. Keşfedilmemiş yerler bilinmez kalır."
+        "{detail} Açığa çıkan varış noktasını Görevler menüsünden kontrol et. Varda’nın sınavı, derinlik 500 fiti aştıktan sonra vardığın ilk katta gerçekleşir. Bu kattan ayrılmadan önce Duruin’i öldür. Önce kattan ayrılırsan görev başarısız olur. İnişini önceden planla. Keşfetmediğin yerler bilinmez kalır."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3696,9 +3696,9 @@
       "source_sha256": "dbd6d44e9cb1a518e534903baadd27af7e30dea5d5b52b483196532c7252e7a0"
     },
     "status.smithing": {
-      "title": "Dövme işlemi sürüyor",
+      "title": "Demircilik işi sürüyor",
       "steps": [
-        "Dövme işlemi sürüyor. İş, kabul ettiğin tasarıda belirtilen süre boyunca devam eder. Kesintiye uğrarsa devam etmeden önce yarım kalan işe ve kalan maliyete bak."
+        "Demircilik işi, onayladığın tasarıda belirtilen süre boyunca devam eder. Kesintiye uğrarsa yeniden başlamadan önce yarım kalan işi ve kalan maliyeti incele."
       ],
       "source_sha256": "77a74ef2527822b1ed23a48d5853f9ea076cc8ed4ca3e1beab17678cbcca024d"
     },

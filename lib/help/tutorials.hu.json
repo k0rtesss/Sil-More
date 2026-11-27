@@ -31,7 +31,7 @@
       "steps": [
         "{detail} Mindkét fél egy húszoldalú kockával dob. A támadásod és a dobásod összege legyen nagyobb a célpont kitérésének és dobásának összegénél. Döntetlennél melléütsz. Egyenlő értékeknél kicsivel az esetek fele alatt találsz.",
         "Találatnál dobj sebzést, majd vond le a célpont védődobását. A páncél az összes sebzést felfoghatja. Például 8 sebzés és 3 védelem esetén a célpont 5 életerőt veszít. A dobásokat a harci naplóban láthatod.",
-        "Ha jóval felülmúlod a kitérést, extra kritikus sebzéskockákat kaphatsz. Könnyebb fegyverhez kisebb különbség is elég. Egy 3 lb súlyú közelharci fegyver általában 10 pont különbségnél egy, 20 pontnál két extra kockát kap. A Finesse ezeket a küszöböket 8 és 16 pontra csökkenti."
+        "Ha jóval felülmúlod a kitérést, extra kritikus sebzéskockákat kaphatsz. Könnyebb fegyverhez kisebb különbség is elég. Egy 3 lb súlyú közelharci fegyver általában 10 pont különbségnél egy, 20 pontnál két extra kockát kap. A Finom technika ezeket a küszöböket 8 és 16 pontra csökkenti."
       ],
       "source_sha256": "3ddcbbdc1e71dca2e3e61992b6ae4ef1221633525d5d566eb4064343e9e90e12"
     },
@@ -59,14 +59,14 @@
     "combat.critical": {
       "title": "Kritikus találatok",
       "steps": [
-        "{detail} A kritikus találat sebzéskockákat ad. Könnyű fegyverhez kisebb találati különbség kell. Közelharcban a Finesse 2 ponttal csökkenti, a Power 1 ponttal növeli a kritikus lépcsőt. A Subtlety megfelelő fegyverrel és üres második kézzel további 2 ponttal csökkenti."
+        "{detail} A kritikus találat sebzéskockákat ad. Könnyű fegyverhez kisebb találati különbség kell. Közelharcban a Finom technika 2 ponttal csökkenti, az Erőteljes ütés 1 ponttal növeli a kritikus lépcsőt. A Kifinomultság megfelelő fegyverrel és üres második kézzel további 2 ponttal csökkenti."
       ],
       "source_sha256": "d11087fa085415de42d17ff51d890f23bcfb20017281a7c8d37678bd02884f41"
     },
     "world.depth": {
       "title": "Új szint",
       "steps": [
-        "{detail} A lépcsők és a folyók új térképet generál, amikor megváltoztatod a mélységet. Egy szint elhagyása az aktuális elrendezést és a benne található tárgyakat elhagyja. Ellenőrizd először a célodat és a rendelkezésre álló felszereléseket; a visszatérés ugyanahhoz a mélységhez új térképet generál."
+        "{detail} Ha lépcsőn vagy aknán át más mélységbe jutsz, a játék új térképet hoz létre. A szint elhagyásakor elveszíted a mostani térképet és az ott maradt tárgyakat. Előbb ellenőrizd a célodat és a készleteidet. Ha visszatérsz ugyanarra a mélységre, új térkép vár."
       ],
       "source_sha256": "e3271845b29a13dc6b4a96a2a12413dcf73f45bfc76a752e41afb50aa350f94a"
     },
@@ -207,14 +207,14 @@
     "item.bow": {
       "title": "Íjak",
       "steps": [
-        "\"Készen állok\", húzzuk a fegyvert és a nyilakat, majd válasszuk ki a fegyvert a \"Válassz aktív fegyvert\" opcióban. A nyílvetés határozza meg a pontosságot; az erő és a fegyver súlya befolyásolja a kárt. Ha nyílvetés közben figyelmeztetett ellenfelek vannak, azok szabadon támadhatnak. \"Nyílvetés közelről\" csak a közeli célpontot védi. A menüben: Change Active."
+        "Készíts elő egy íjat és nyilakat, majd válaszd ki az íjat az „Aktív fegyver váltása” menüben. A pontosságot az Íjászat határozza meg, a sebzést az Erő és az íj súlya befolyásolja. Ha éber ellenség mellett lősz, az rögtön rád támadhat. A Point Blank Archery képesség csak az általad célba vett szomszédos ellenség ilyen támadásától véd meg."
       ],
       "source_sha256": "d806c42d2237f2c5f4cf8e8976ac41421596ffcddce842758f2cb4416e258acc"
     },
     "item.arrows": {
       "title": "Nyilak és tegez",
       "steps": [
-        "\"Készen\" állapotú nyilakat a tegezben, amiket egy nyíllal lehet kilőni. További nyilakat a hátizsákban lehet tárolni. Ha több, mint egy \"Készen\" állapotú nyíl van, a \"Válassz aktív\" parancs segítségével kiválaszthatod, melyiket szeretnéd kilőni. Csak egy nyíl kiválasztása ingyenes. A menüben: Change Active."
+        "Készíts elő nyilakat a tegezben, hogy íjjal kilőhesd őket. A tartalék nyilakat a hátizsákban tárolhatod. Ha több köteg van előkészítve, az aktív felszerelés váltásánál választhatsz közülük. Csak a nyílköteg váltása nem kerül időbe."
       ],
       "source_sha256": "461b1e4123678a3bcc9eae5689619741a221aa5b3f788e09e06930ea3aa4909e"
     },
@@ -235,7 +235,7 @@
     "item.ring": {
       "title": "Gyűrűk",
       "steps": [
-        "Az ékszerek javíthatják az attribútumokat, a készségeket vagy a védekezési képességeket, de lehetnek hátrányok is. Olvassa el a ismert tulajdonságokat, mielőtt egyet felvenne. Egy átkotlan ékszer ellenálló lehet a eltávolítás ellen, és egy azonosítatlan ékszer még rendelkezhet olyan tulajdonságokkal, amelyeket még nem fedezte fel."
+        "A gyűrűk javíthatják a tulajdonságaidat, készségeidet vagy ellenállásaidat, és hátrányaik is lehetnek. Mielőtt felveszel egy gyűrűt, olvasd el az ismert tulajdonságait. Egy elátkozott gyűrűt nehéz lehet levenni. Egy azonosítatlan gyűrűnek olyan tulajdonságai is lehetnek, amelyeket még nem ismersz."
       ],
       "source_sha256": "73f911c384a2ffe3f66dcf66ffc7afe3ac74b2f8e5ba201d092d0b97c0e57aa6"
     },
@@ -391,7 +391,7 @@
     "status.diseased": {
       "title": "Betegség",
       "steps": [
-        "{detail} Fertőzésveszélynél nyolc betegség közül sorsol a játék. Amelyikből kigyógyultál, azt ebben a kalandban nem kapod el újra. A gyógyító fű, a gyógyital és a Miruvor diagnózis előtt is minden betegséget meggyógyít. Az angbandi pestis egyetlen növényi ellenszere a gyógyító fű. A többi betegséghez egy véletlenszerű gyógyfű is tartozik. A fertőzés azonnal elvesz 1 állóképességet, majd 150 játékoskörönként 1 pontot egy véletlen tulajdonságból, pihenés közben is. A Hardiness ezt 300 körre növeli és felezi a fertőződés esélyét. Alchemy birtokában az önismeret drágaköve felfedi a betegség és az ellenszer nevét. Nélküle használatonként 50% az esély a névre, majd az ismert név mellett 50% a gyógyfűre. Ember és tünde foglyok küldetésjutalomként teljes diagnózist adhatnak. A pestis kivételével a diagnózis mellé egy megfelelő gyógyfüvet is adhatnak elfogyasztásra. A gyógyulás megszünteti a betegség tulajdonsághátrányait és védettséget ad. A felfedezések és a védettség mentésre kerülnek. A gyógyító növény ilyenkor szokásos hatása és tápértéke helyett gyógyít. Más füvek rendesen hatnak."
+        "{detail} Fertőzésveszélynél nyolc betegség közül sorsol a játék. Amelyikből kigyógyultál, azt ebben a kalandban nem kapod el újra. A gyógyító fű, a gyógyital és a Miruvor diagnózis előtt is minden betegséget meggyógyít. Az angbandi pestis egyetlen növényi ellenszere a gyógyító fű. A többi betegséghez egy véletlenszerű gyógyfű is tartozik. A fertőzés azonnal elvesz 1 állóképességet, majd 150 játékoskörönként 1 pontot egy véletlen tulajdonságból, pihenés közben is. A Edzettség ezt 300 körre növeli és felezi a fertőződés esélyét. Alchemy birtokában az önismeret drágaköve felfedi a betegség és az ellenszer nevét. Nélküle használatonként 50% az esély a névre, majd az ismert név mellett 50% a gyógyfűre. Ember és tünde foglyok küldetésjutalomként teljes diagnózist adhatnak. A pestis kivételével a diagnózis mellé egy megfelelő gyógyfüvet is adhatnak elfogyasztásra. A gyógyulás megszünteti a betegség tulajdonsághátrányait és védettséget ad. A felfedezések és a védettség mentésre kerülnek. A gyógyító növény ilyenkor szokásos hatása és tápértéke helyett gyógyít. Más füvek rendesen hatnak."
       ],
       "source_sha256": "f69e479dbfbf5105e334b545ae909112394825bedc565b0fad516b9b57f33494"
     },
@@ -543,7 +543,7 @@
       "source_sha256": "f696afb8bbdf49f20e4f3e58afc4a2394b4662685a4f5b5bf975462f140b4e12"
     },
     "status.song_challenge_effect": {
-      "title": "Tartós kihívás hatása",
+      "title": "A Kihívás dalának utóhatása",
       "steps": [
         "{detail} Egy dal átmeneti \"Kihívás\" hatást okozott. Nézze meg a jelenlegi képességi bontást, hogy megtekinthesse a hatásos módosítást. Az hatás és a fennmaradó időtartam függetlenek attól, hogy melyik dalt énekel jelenleg."
       ],
@@ -626,7 +626,7 @@
     "status.afraid.remedy": {
       "title": "Gyógyítás: félelem",
       "steps": [
-        "A Miruvor vagy az ork-alkohol eltávolítja a félelmet. Az ork-alkohol szintén bénító hatást is okozhat, ezért mérjük fel a rendelkezésre álló lehetőségeket. Egy ismert gyógymód most elérhető. Ha más akciót preferál, akkor ezután léphet.",
+        "A Miruvor és az ork szesz elmulasztja a félelmet. Az ork szesz kábultságot is okozhat, ezért mérlegeld a lehetőségeket. Van nálad ismert ellenszer. Hagyd ki a leckét, ha inkább mást tennél.",
         "Kezelendő állapot: félelem. Válassz és használj egy ismert, megfelelő szert a gyakorlat befejezéséhez. A szer megőrzéséhez szakítsd meg a kiválasztást vagy hagyd ki a leckét."
       ],
       "source_sha256": "5d3bc7fa647d11187cd6ee53e1d101ed6e4c6a7e2db407158888e8f421d269e2"
@@ -1077,15 +1077,15 @@
     "ability.15.preview": {
       "title": "Őrző (Warden)",
       "steps": [
-        "A Warden a Melee és a Dobás közötti különbség felét adja a Dobásnak, ha a Melee magasabb, és a különbséget lefejtve. Ha a Versatility is aktív, akkor a Melee egyharmadát adja a Dobásnak, és a különbséget felfelé kerekíti. Ez a számítás nem tartalmazza a felszerelés és az attribútumok bónuszait.",
-        "Az első szabad váltás, amely során a következő akciónál a közelharc helyett egy nyílon történő támadást választ, a következő: * **Nyíl:** Lehetővé teszi a közelharc és a nyíl használat közötti váltást. * **Kezelés:** Lehetővé teszi a közelharc és a kezelés közötti váltást, vagy a közelharc fegyverei közötti váltást. * **Változatos:** Lehetővé teszi a közelharc fegyverei közötti váltást, vagy a nyílok közötti váltást."
+        "Ha a Közelharc alapértéke magasabb az Íjászaténál, az Őrző a különbség lefelé kerekített felét hozzáadja az Íjászathoz. Ha a Sokoldalúság is aktív, ehelyett a Közelharc alapértékének felfelé kerekített harmadát adja hozzá. A felszerelés és a tulajdonságok bónuszai nem számítanak bele.",
+        "A következő műveleted előtt az első váltás közelharci fegyverről íjra nem kerül időbe. A Hajítás képességgel ez közelharci fegyver és hajítófegyver, illetve két közelharci fegyver közötti váltásra is vonatkozik. A Sokoldalúsággal két közelharci fegyver vagy két íj között is válthatsz így."
       ],
       "source_sha256": "5dd794eb47016cb523d154c563c53e7a00e660970b2d27e97bff8dc4ab882fc9"
     },
     "ability.16.preview": {
       "title": "Erőteljes hajítás (Power Throw)",
       "steps": [
-        "Miután egy fordulóban felkészítetted a közelharci fegyvert vagy vártál, dobd a fegyverövvel ellátott kardot vagy kézi kapust egy közeli ellenfélre, miközben közelharcot folytatod. Dobj mindkét támadást külön-külön a kitérés ellen, majd összeadd a sikeres támadások okozta kárt, és végül egyszer végezd a védelem dobását. A közelharci fegyvered továbbra is aktív."
+        "Miután egy kört a közelharci fegyvered előkészítésére vagy várakozásra fordítottál, lándzsát vagy kézi baltát dobhatsz a fegyverövedről egy szomszédos ellenfélre, miközben közelharcban is támadod. Mindkét támadás külön dobást kap a kitérés ellen. A találatok sebzése összeadódik, mielőtt az ellenfél egyszer dob a védelemre. A közelharci fegyvered aktív marad."
       ],
       "source_sha256": "2cd156e91f84b252398b21033159276f973303929066473e826d737625964b0c"
     },
@@ -1127,8 +1127,8 @@
     "ability.25.preview": {
       "title": "Sokoldalúság (Versatility)",
       "steps": [
-        "A sokoldalúság a \"Kezdeti\" és a \"Küzdelem\" közötti különbségnek a fele, ha a \"Kezdeti\" magasabb, és a különbséget lefejtve számoljuk. Ha a \"Védő\" is aktív, akkor a \"Kezdeti\" értékének egyharmadát számoljuk, és felfelé kerekítve. Az eszközök és az attribútumok által nyújtott bónuszok ebben a számításban nem számítanak.",
-        "Az első szabad fegyverváltás, amely a következő akciónál történik, ingyenesen a nyílból a közelharcba. A dobással kapcsolatos esetekben, a nyíl és a dobás között is válthat. A Warden esetében, a közelharc fegyverek vagy a nyíl között is válthat."
+        "Ha az Íjászat alapértéke magasabb a Közelharcénál, a Sokoldalúság a különbség lefelé kerekített felét hozzáadja a Közelharchoz. Ha az Őrző is aktív, ehelyett az Íjászat alapértékének felfelé kerekített harmadát adja hozzá. A felszerelés és a tulajdonságok bónuszai nem számítanak bele.",
+        "A következő műveleted előtt az első váltás íjról közelharci fegyverre nem kerül időbe. A Hajítás képességgel ez íj és hajítófegyver, illetve két íj közötti váltásra is vonatkozik. Az Őrzővel két közelharci fegyver vagy két íj között is válthatsz így."
       ],
       "source_sha256": "e86a5fd3d00b207a3434b54efdf0dfe1f471e6231df621a59599e8abe61bacb7"
     },
@@ -1576,7 +1576,7 @@
     "ability.149.preview": {
       "title": "A pusztítás dala (Song of Slaying)",
       "steps": [
-        "Egy kritikus közelharci találat, ha a célé a \"Hang\" (életerő) értéke a te hatékony \"Hang\" értékének kétszeresénél nem nagyobb, akkor a cél elpusztul. Ez egy kritikus találatnak kell lennie; a normális találatok nem okoznak ezt a hatást."
+        "A kritikus közelharci találat megöli a célpontot, ha a megmaradt életereje legfeljebb a tényleges Ének értéked kétszerese. A közönséges találatok nem váltják ki ezt a hatást."
       ],
       "source_sha256": "ec38d6c4fe2ef2ae8ccd79e5efa914047ae4a5f7a129df88fa38d5b71ec081c7"
     },
@@ -2284,7 +2284,7 @@
     "effect.240": {
       "title": "Terror — ismert hatás",
       "steps": [
-        "Próbálja meg megfélemlíteni a megvakított lényeket. Válassza meg a irányt, majd ellenőrizze a hang költségét. Hangja figyelmeztetheti más lényeket."
+        "A kürt megpróbálja megfélemlíteni a hatókörébe eső lényeket. Válaszd ki az irányt, és ellenőrizd a szükséges hangpontokat. A kürtszó más lényeket is riaszthat."
       ],
       "source_sha256": "c5a7ad98668a9653b3864f897c77b20cc4344b226e9ded5b4200fe86013447ee"
     },
@@ -2473,7 +2473,7 @@
     "effect.382": {
       "title": "Terror — ismert hatás",
       "steps": [
-        "Ha a félelem elleni védelem nem akadályozza meg a hatást, akkor 10d4 fordulóig félelmet és 5d4 fordulóig gyorsaságot okoz. A félelem elleni védelem ez a gyorsasági előnyt is megakadályozza. Normális növényi táplálást biztosít. Ha ez a jelenlegi betegség kezelése, akkor a betegséget gyógyítja, és helyreállítja a korábbi hátrányait, anélkül, hogy a normális hatást vagy táplálást alkalmazná; egyébként a normális hatás érvénybe lép."
+        "Ha a félelem elleni védelmed nem hat, a gyógynövény 10d4 körre félelmet okoz, és 5d4 körre felgyorsít. Ha sikerül kivédened a félelmet, a gyorsulás is elmarad. A gyógynövény a szokásos módon táplál. Ha ez a gyógynövény a jelenlegi betegséged ellenszere, meggyógyít, és visszaadja a betegség miatt elveszített tulajdonságpontjaidat. Ilyenkor elmarad a szokásos hatás és a tápérték. Egyébként a szokásos módon hat."
       ],
       "source_sha256": "5b77dbfdeeef100f3f8328f96e08cdb72200ab12abb9767e2154fa08863e8094"
     },
@@ -2487,7 +2487,7 @@
     "effect.384": {
       "title": "Megújítás — ismert hatás",
       "steps": [
-        "Visszaállítja minden tulajdonságot akár 3 ponttal. Emellett normális növényi táplálást is biztosít. Nem eltávolítja a kapcsolódhatatlan felszerelés okozta hátrányokat. Ha ez a jelenlegi betegség kezelése, akkor a betegséget és a hozzá tartozó hátrányokat megszüntíti, nem alkalmazva a normális hatást vagy táplálást; egyébként a normális hatás alkalmazódik."
+        "Minden tulajdonságból legfeljebb 3 elveszített pontot állít vissza, és a szokásos módon táplál. A felszerelés okozta egyéb hátrányok megmaradnak. Ha ez a gyógynövény a jelenlegi betegséged ellenszere, meggyógyít, és visszaadja a betegség miatt elveszített tulajdonságpontjaidat. Ilyenkor elmarad a szokásos hatás és a tápérték. Egyébként a szokásos módon hat."
       ],
       "source_sha256": "e3a464206778421f8b685812d6e57e4173f32bd6c783f1b1044c41b29e41b990"
     },
@@ -2515,7 +2515,7 @@
     "effect.388": {
       "title": "Gyengeség — ismert hatás",
       "steps": [
-        "Csökkenti az erő értékét 1-gyel, és nyújt át egy átlagos növényi táplálékot. A táplálkozás nem vonja vissza a hatásait. Ha ez a jelenlegi betegség kezelése, akkor a betegséget gyógyítja, és helyreállítja a korábbi hátrányait, anélkül, hogy a normális hatást vagy a táplálékot alkalmazná; egyébként, a normális hatás alkalmazódik."
+        "Az Erőt 1 ponttal csökkenti, és a szokásos módon táplál. A táplálék nem adja vissza az elveszített Erőt. Ha ez a gyógynövény a jelenlegi betegséged ellenszere, meggyógyít, és visszaadja a betegség miatt elveszített tulajdonságpontjaidat. Ilyenkor elmarad a szokásos hatás és a tápérték. Egyébként a szokásos módon hat."
       ],
       "source_sha256": "990fd3d5b050fd0a4ae48e266ac26a598e4ac98b8ebbb5419ff79a90cd2e797b"
     },
@@ -2604,70 +2604,70 @@
       "source_sha256": "dda38dd3b88e9b72cea092ddf630c98ca9b8d9bddf7c817f7c2a519808f8088f"
     },
     "storage.pack": {
-      "title": "Csomagok tárolása",
+      "title": "Tárolás a hátizsákban",
       "steps": [
         "{detail} A hátizsáknak saját méretkorlátja van. A súly is hozzájárul az általános terheléshez. Mindkét korlátot figyelembe kell venni, amikor kiválasztod, mit visz magad, mert egy kis, de nehéz tárgy és egy nagy, de könnyű tárgy különböző korlátokat jelent."
       ],
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
-      "title": "Kapacitás",
+      "title": "A fegyveröv űrtartalma",
       "steps": [
-        "{detail} A fegyverövnek saját, külön méretkorlátja van a hátizsákhoz képest. A felkészített felszerelést saját szabályai szerint lehet elérni. Egy tárgy mozgatása a tárolási helyek között nem ad lehetőséget a végtelen kapacitású hordozásra."
+        "{detail} A fegyverövnek a hátizsáktól független térfogatkorlátja van. Az előkészített felszerelést az adott művelet szabályai szerint érheted el. A tárgyak átpakolása nem teszi korlátlanná a teljes hordkapacitást."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
     "storage.quiver": {
-      "title": "A felszerelés kapacitása",
+      "title": "A tegez kapacitása",
       "steps": [
-        "{detail} A tegez a saját szabályai szerint tárolja a nyilakat. Ha több nyilak van, mint amennyit a hátizsák befogad, akkor szükség lehet egy extra hátizsákra. Egy csomagot részben fel lehet venni, ha csak egy rész illik bele; ellenőrizd, hogy pontosan hány nyilakot gyűjtöttél."
+        "{detail} A tegezbe csak meghatározott számú nyíl fér. A többletnek hely kellhet a hátizsákban. Ha egy kötegből csak néhány nyíl fér el, annyit vehetsz fel. Ellenőrizd, hány nyilat vettél fel."
       ],
       "source_sha256": "2901f8607c5fd29a7981ace679d30d65bec33cc9a7dd2ee160cf5d5901a7d403"
     },
     "storage.weight": {
-      "title": "Terhet hordoz",
+      "title": "Hordott súly",
       "steps": [
         "A hordozható súly külön van a tároló tértől. A nehéz terhek lassíthatnak, még akkor is, ha van hely több tárgynak. Ellenőrizze a megjelenített terhet, és fontolóra vegye, hogy elhagyja a felesleges, nehéz felszerelést."
       ],
       "source_sha256": "13beba1f2d1595f6ba75a4ba3519f791ed15c82ba0f795552a90818a63c498eb"
     },
     "storage.pack_access": {
-      "title": "A csomag belsejének megnyitása",
+      "title": "Hozzáférés a hátizsákhoz",
       "steps": [
         "Ez a \"Pack\" (hátizsák) használata három forduló alatt zajlik. Az ellenfelek is ebben a időn belül léphetnek, és egy támadás vagy a saját visszavonásod megszakíthatja. Lehetőség szerint, a harc előtt, előkészítsd a szükséges felszerelést."
       ],
       "source_sha256": "68ce9a0651f5cd3b3f6f0cfa00a4a9173c9b2b10234538843f40c2b11cad2386"
     },
     "storage.pack_interrupted": {
-      "title": "Hozzáférés megszakadt",
+      "title": "Megszakadt a hozzáférés a hátizsákhoz",
       "steps": [
         "Egy támadás megszakította a hátizsák használatát, mielőtt befejeződött. Ellenőrizze az tárgy jelenlegi helyzetét és a kommunikációs előzményeket. Lehet, hogy először el kell távolodnia a veszélytől, mielőtt újra próbálna."
       ],
       "source_sha256": "61323a01ebeb2584613eb833876bb048ed0ffdec5a8c84817e70dcd5c5098565"
     },
     "storage.partial_pickup": {
-      "title": "Csak egy rész illeszkedik",
+      "title": "A kötegnek csak egy része fér el",
       "steps": [
-        "Csak egy rész a raktárban elfutott. Ellenőrizd, hogy mennyi tárgyat gyűjtöttél, és melyek még a talajon vannak. Ha több tárgyat szeretnél, használd a szabad helyet, vagy válaszd egy másik raktárcsoportot."
+        "Csak a köteg egy része fért el. Nézd meg, mennyit vettél fel és mi maradt a földön. Ha többet szeretnél felvenni, szabadíts fel helyet, vagy válassz másik tárolót."
       ],
       "source_sha256": "0fd1a7bb882e490e84224ed873a113e86fe8dde1b2335844098cc81e2b618929"
     },
     "world.rest": {
-      "title": "Pihenés: időt vesz igénybe",
+      "title": "A pihenés körökbe kerül",
       "steps": [
         "A pihenés ismétli a fordulókat, amíg az célja meg nem valósul, vagy valami megszakítja. Az ellenségek és a minimális időtartam továbbra is futnak. A mérgezés, a vérvesztés és a szomjúság megakadályozzák a normális életerő-visszaállítást; a zene megakadályozza a hangvisszaállítást. A betegséget kezeljük, mielőtt hosszú pihenésre megyünk."
       ],
       "source_sha256": "f8ec297cf2113dd15776f2fd692a10a16c15f5f5eb3374fad40e162c8eb8740d"
     },
     "world.run": {
-      "title": "Mozgás és ismétlődő mozdulatok",
+      "title": "Futás és ismételt mozgás",
       "steps": [
         "A mozgás ismétlődik, amíg meg nem állítod, vagy valami megszakítja. Az ellenségek és a minimális időtartam közötti időtartam minden lépésen át. Minden lépés időt igényel; ellenőrizd az útvonalat, mielőtt elindítod vagy folytatod a futást."
       ],
       "source_sha256": "2bbe07516ae420b7d6ee1e287ea4b0a7d6f4024bf739db16b8e436fca72ce995"
     },
     "world.trap": {
-      "title": "Ismerős csapás",
+      "title": "Ismert csapda",
       "steps": [
         "Megtaláltál egy csapdát. Az, hogy észreveszed, nem bénítja meg. Válassz egy útvonalat, amelyen átkereshetsz, vagy ellenőrizd a \"Feloldás\" opciót és annak kockázatát, vagy használj egy engedélyezett ugrást, ha a hőse tud ugrálni. Ha a csapda már aktiválódott, ellenőrizd az életerődet és állapotodat, mielőtt bármit csinálsz. A menüben: Disarm."
       ],
@@ -2681,14 +2681,14 @@
       "source_sha256": "bfad51b7c10cba58b6c689df417a9a2593120603b70bcb227b89f338f4f25828"
     },
     "world.light_low": {
-      "title": "A tüzelőanyag mennyisége csökken",
+      "title": "Fogy az üzemanyag",
       "steps": [
         "A felszerelt lámpádban a fúvózat alacsony. Keress egy kompatibilis újratöltőt, vagy előre készítsd el a helyettesítést, mielőtt lemerül. A fúvózat újratöltése vagy felszerelésének cseréje időt vesz igénybe, ezért előre készülj fel, mielőtt ellenségekkel találkozol."
       ],
       "source_sha256": "8786e11b6583b0e43678408501a1fee7bba9d4b250417c993581f86c9ac20971"
     },
     "world.light_out": {
-      "title": "A fényod elhalványult",
+      "title": "Kialudt a fényed",
       "steps": [
         "A felszerelt könnyűfegyver tüzelőanyagja elfogyott. \"Újratöltsd\" vagy, ha lehetséges, helyettesítsd egy másik fegyverrel. A megemlékezett térkép továbbra is látható, de nem mutatja meg minden veszélyt a sötétben. A menüben: Refuel."
       ],
@@ -2709,7 +2709,7 @@
       "source_sha256": "2b4161dcbbd69c5bd45ee2c74afed130b628a8d85a4ad4b9dd5031559f78ea79"
     },
     "quest.progress": {
-      "title": "Feladat teljesítése",
+      "title": "A küldetés előrehaladása",
       "steps": [
         "{detail} Ellenőrizze a \"Feladatok\" menüt, hogy megkapja a többi cél és esetleges korlátozásokat. A cél elérése még mindig azt jelenti, hogy vissza kell térnie, hogy megkapja a jutalmat. A menüben: Quests."
       ],
@@ -2737,14 +2737,14 @@
       "source_sha256": "643c4cbab6770e7477f7c02610dba41bb45d22e064014e86effdc4c084978e56"
     },
     "tale.blessing": {
-      "title": "A varázslat elérhető",
+      "title": "Elérhető egy áldás",
       "steps": [
         "{detail} Olvasd el a varázslat előnyeit, költségét és korlátait, mielőtt választod. Az opciókat összehasonlíthatod anélkül, hogy varázspontokat felhasználanál."
       ],
       "source_sha256": "bb101021c2c3f77bc9fc79a28deaa4ab6164ca1981ff0b35d8d3beb71ac6f5bb"
     },
     "tale.oath_break": {
-      "title": "Egy szövetség megszegődött",
+      "title": "Megszegtek egy esküt",
       "steps": [
         "{detail} A te cselekedeted megszegte a szövetséget. Ellenőrizd a elveszett előnyt és bármely feltáruló varázslatot, majd tervezd meg a következő lépéseket a megváltozott helyzet alapján. A történetben szereplő másik hős is hasonló következményekkel szembesülhet."
       ],
@@ -2772,14 +2772,14 @@
       "source_sha256": "97086548aea5756ac3307792960260358a76f3197b26b4c18af867885488efe7"
     },
     "tale.truce": {
-      "title": "A bék accord",
+      "title": "Fegyverszünet",
       "steps": [
         "{detail} A fegyverszünet érvényben van. Olvassa el a feltételeit, mielőtt támad, vagy megsértené a megállapodást. Bizonyos cselekmények befejezhetik a fegyverszünetet, és azonnali veszélyt hozhatnak maguk után."
       ],
       "source_sha256": "8e41d388ec62a117db5136d35c880ab988cc5ca97f50a8df132ffad0e4d5ee6a"
     },
     "world.partition.1": {
-      "title": "Tágas terme",
+      "title": "Tágas termek",
       "steps": [
         "{detail} A szobákban található ajtók segíthetnek aellenek ellenőrzésében; mielőtt egy nyílt területen átkel, keress egy biztonságos útvonalat. A padlóra elhelyezett tárgyak elsősorban fegyvereket és páncélozatot tartalmaznak, nem pedig ékszereket."
       ],
@@ -2793,7 +2793,7 @@
       "source_sha256": "ad27e2bd211eda12cf2dfa3b81404546eecba3cffff9325ade79f32477586c72"
     },
     "world.partition.3": {
-      "title": "Elpusztult terme",
+      "title": "Romos termek",
       "steps": [
         "{detail} A romok töredezett szerkezeteket és szabálytalan passzokat tartalmaznak. Ellenőrizd, mely ajtók még zárhatók. A tárgyak között elsősorban fegyvereket, páncélozatot és utánpótlást találsz; sérült felszerelések is előkerülhetnek."
       ],
@@ -2807,21 +2807,21 @@
       "source_sha256": "6a8e92396417cc8516de5c98afb86fa631b33d6090abdb369bfbb9ccbd64eaee"
     },
     "world.partition.5": {
-      "title": "Lyukszáj-vidék",
+      "title": "Szakadékos vidék",
       "steps": [
         "{detail} Lyukak tagadják ezt a területet. Esés veszélyt jelenthet, és elhoztad a mélybe. Ellenőrizd minden átmenetet és a szükséges ugrást, mielőtt elmozdulsz. \"Nézd meg\" a széleken található sérült felszerelést, de kerüld a szűk hídon történő harcot. A sztárvas lehet a megfelelő mélységben."
       ],
       "source_sha256": "1ac7b78069c279252a1a8b8e273296b94accf2744fda7cc7e91304bd5deb03a2"
     },
     "world.partition.6": {
-      "title": "Remek barlang",
+      "title": "Nagy barlang",
       "steps": [
         "{detail} Egy nagyszerű barlang hosszú látótávolságot és számos bejárati útvonalat kínál; távoli ellenségek is észre vehetnek. Használjon fedezetet, és tartson helyet a visszavonásra. A tárgyak keverednek, de itt gyakrabban találhatók utánpótló termékek és ékszer, mint a megszokott szobákban; a mithril megfelelő mélységeken is megtalálható lehet."
       ],
       "source_sha256": "7e56c95f05dc717d5ba40cdee0312ff99634545c177353681d8c6280bcb3d7c6"
     },
     "world.partition.fire": {
-      "title": "Tűszikláj",
+      "title": "Tűzbarlang",
       "steps": [
         "{detail} Ebben a barlangban egy-egy szinttel csökken a tűz, a félelem és a kábultság elleni ellenállásod. Harc vagy veszélyes átkelés előtt ellenőrizd az értékeket. A barlang típusa a környezetet jelzi, nem fedi fel a rejtett lényeket. Készleteket is találhatsz; kitérő előtt mérlegeld a veszélyt."
       ],
@@ -2835,51 +2835,51 @@
       "source_sha256": "e17b3a0c15157cdc6a551f038f509d13c965063d5eb9ac1d5610264dac5706fe"
     },
     "world.partition.poison": {
-      "title": "Zavaró barlang",
+      "title": "Méregbarlang",
       "steps": [
         "{detail} Ebben a barlangban egy-egy szinttel csökken a méreg, a félelem és a kábultság elleni ellenállásod. Harc vagy veszélyes átkelés előtt ellenőrizd az értékeket. A barlang típusa a környezetet jelzi, nem fedi fel a rejtett lényeket. Készleteket is találhatsz; kitérő előtt mérlegeld a veszélyt."
       ],
       "source_sha256": "0b6e1d31b20ee4e615bf7824a0ae2839d0ebad99ca4e4a04afccaeb834544a12"
     },
     "quest.1": {
-      "title": "Tulkas, a Nagy",
+      "title": "Tulkas, az Erős",
       "steps": [
-        "{detail} Keressd meg a \"Feladatok\"-ban megnevezett lényt, majd térj vissza Tulkashoz, hogy megkapd a jutalmat. Mielőtt a lény ellen harcolnál, ellenőrizd, hogy milyen támadásokat tanult meg. A menüben: Quests."
+        "{detail} Vadászd le a Küldetések menüben megnevezett lényt, majd térj vissza Tulkashoz a jutalomért. Mielőtt megküzdesz vele, nézd meg, mit tudsz a támadásairól."
       ],
       "source_sha256": "122273fe7ed2b38312b361b2f5607c8b838595b2cc4905172a1b8532c3d6f2ad"
     },
     "quest.2": {
-      "title": "Aulë, a fémkovató",
+      "title": "Aulë, a Kovács",
       "steps": [
-        "{detail} Készíts egy olyan alkotást, amely megfelel Aulë jelenlegi követelményeinek, majd szerezd be a jutalmat. Olvasd el az objektívet és a fémvágási tervet, mielőtt anyagra költenél. Ha ezt a szintet elhagyod, mielőtt a jutalom megkapódna, a küldetés elmarad."
+        "{detail} Kovácsolj egy tárgyat, amely megfelel Aulë jelenlegi követelményeinek, majd vedd át a jutalmat. Az anyagok elhasználása előtt nézd át a célt és a kovácsolási tervet. Ha a jutalom átvétele előtt elhagyod ezt a szintet, a küldetés meghiúsul."
       ],
       "source_sha256": "4a57218cb48c385ecaa5c1f64a58c52a285cfdfd9dec6591958f371a3a2295f5"
     },
     "quest.3": {
-      "title": "Mandos, a végzet hozója",
+      "title": "Mandos, a Bíró",
       "steps": [
-        "{detail} Kövesse Mandos célját a fogvatartott léletről, majd szerezze meg a jutalmat. A \"Feladatok\" menüben ellenőrizze a pontos célpontot. Ha ez a szintet elhagyja, mielőtt megkapná a jutalmat, a feladat elmarad. A menüben: Quests."
+        "{detail} Teljesítsd Mandos feladatát a megkötözött lélekkel kapcsolatban, majd vedd át a jutalmat. A pontos célpontot a Küldetések menüben találod. Ha a jutalom átvétele előtt elhagyod ezt a szintet, a küldetés meghiúsul."
       ],
       "source_sha256": "a5e15e78f02946cbd295ae422bad111088902f615f8033c7085d13be31677443"
     },
     "quest.4": {
-      "title": "Nienna, a együttérzés asszonya",
+      "title": "Nienna, a könyörület úrnője",
       "steps": [
-        "{detail} Keress a lefelé vezető lépcsőt anélkül, hogy bárkit megölne, majd hagyja, hogy a jutalom utasításait kövesse, mielőtt elhagyja. Kerülje azokat a hatásokat, amelyek halálhoz vezethetnek, beleértve a automatikus támadásokat is. Ha a szintet elhagyja, mielőtt megkapná a jutalomot, akkor ez a próba elhagyásra kerül."
+        "{detail} Találd meg a lefelé vezető lépcsőt anélkül, hogy bárkit megölnél, és távozás előtt kövesd a jutalom megszerzéséhez adott utasításokat. Kerüld a halálos hatásokat, az automatikus követő támadásokat is. Ha a jutalom átvétele előtt elhagyod a szintet, a próba meghiúsul."
       ],
       "source_sha256": "54fceb5f8fb865850d9e2c767b5fd0e8b2bc8fe8cc8f57cb3e7b881c304ebeea"
     },
     "quest.5": {
-      "title": "Óromë, a nagyszerű vadász",
+      "title": "Oromë, a Nagy Vadász",
       "steps": [
-        "{detail} A vadászat külön számolja a medvák, a pókházak, a kígyók és a vámpírok számát. Ellenőrizze az egyes csoportok összesített eredményeit a \"Feladatok\" részben. Egy csoportnak több tagját megölni nem teljesíti egy másik csoport követelményeit. A menüben: Quests."
+        "{detail} A vadászat külön számolja a farkasokat, a pókokat, a kígyókat és a vámpírokat. Az aktuális számokat a Küldetések menüben ellenőrizheted. Az egyik csoportból szerzett többlet nem számít bele egy másik csoport követelményébe."
       ],
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },
     "quest.6": {
-      "title": "Varda, a csillagok ura",
+      "title": "Varda, a csillagok úrnője",
       "steps": [
-        "{detail} Ellenőrizze a \"Feladatok\" menüt, hogy megtalálja a célállást. Varda próbatestje a ensimmäző szinten van, ahova 500 láton juthat, győzze el Duruinot, mielőtt elhagyja ezt a szintet, különben a feladat elvesz. Tervezze meg a leereszkedést, mielőtt beindul, az ismeretlen helyek továbbra is ismeretlenek maradnak. A menüben: Quests."
+        "{detail} A Küldetések menüben nézd meg a felfedett célállomást. Varda próbája azon az első szinten vár, amelyet 500 lábnál mélyebben érsz el. Öld meg Duruint, mielőtt elhagyod ezt a szintet, különben a küldetés meghiúsul. Tervezd meg előre az ereszkedést. A felfedezetlen helyek ismeretlenek maradnak."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3556,23 +3556,23 @@
       "source_sha256": "9acdbdf034fb6f517ac6777e0d382f4aa0f7c321b9bb88e781dd71fb002f1df5"
     },
     "status.heavy_stun": {
-      "title": "Erőteljes, rövid időre ható bénítás",
+      "title": "Súlyos kábultság",
       "steps": [
-        "A bénító hatás legalább 50, így minden képesség 4-tel csökken. Ha 100-nál nagyobb, akkor elveszíti a képességet cselekedni. A Clarity vagy a Miruvor használható a bénító hatás megszüntetésére, miközben még használhat egy tárgyat."
+        "A kábultság mértéke legalább 50, ezért minden jártasságod 4 ponttal csökken. 100 fölött nem cselekedhetsz. A Tisztánlátás (Clarity) vagy a Miruvor megszüntetheti a kábultságot, amíg még tudsz tárgyat használni."
       ],
       "source_sha256": "d2041d74ca364183b6ff7819e6677204dd809860e3c181ad8a93fff4c4ed47c5"
     },
     "status.knocked_out": {
-      "title": "Felverve",
+      "title": "Eszméletlen",
       "steps": [
-        "A bénító hatás intenzitása 100-nál nagyobb. Nem tudsz lépést végezni, amíg ez az érték nem csökken elegendő mértékben, hogy meggyógyulhass. A \"Continue\" parancs befejezi a magyarázatot; a gyógyító eszközök elérhetővé válnak, miután újra tudsz lépést végezni."
+        "A kábultság mértéke 100 fölött van. Amíg eléggé nem csökken, nem cselekedhetsz. A „Folytatás” bezárja a magyarázatot. Gyógyszert akkor vehetsz be, ha ismét tudsz cselekedni."
       ],
       "source_sha256": "9cbfc77d25d5d1d3e250b9f1eb3fdd3dc9204907e52edad5d2e51accfbfc74cd"
     },
     "status.full": {
-      "title": "Teljes",
+      "title": "Jóllakottság",
       "steps": [
-        "Jelenleg elegendő táplálékot rendelkezésére áll. Tarts el élelmet, hacsak nem szükséged van egy gyógynövény más hatására. \"Teljes\" azt jelenti, hogy a táplálék készlete, nem az életerőd vagy a hangod."
+        "Egyelőre jóllaktál. Tartsd meg az ételt későbbre, hacsak nincs szükséged egy gyógynövény másik hatására. A jóllakottság a tápanyagtartalékodról szól, nem az életerődről vagy a hangodról."
       ],
       "source_sha256": "932c011b434c5fab5d60bc0d874351686bc760fa5397656e4afe7db36996066c"
     },
@@ -3586,12 +3586,12 @@
     "status.song_contest_player_stacks": {
       "title": "Vereség egy éneklő-harcban",
       "steps": [
-        "Ellenséged előrehalad a zenei párbajban. A veszteség befolyásolhat egy tulajdonságot, és átmenetileg megakadályozhatja a zongorázást. Ellenőrizd a jelenlegi párbaj állapotát, és fontold meg, hogy mielőbb végezd a zongorázást, mielőtt elveszíted a párbajt."
+        "Ellenfeled fölénybe kerül az énekpárbajban. Ha veszítesz, csökkenhet egy tulajdonságod, és egy ideig nem énekelhetsz. Nézd meg, hogyan áll a párbaj, és fontold meg, hogy abbahagyod az éneket, mielőtt veszítesz."
       ],
       "source_sha256": "cef995d8d3750ed09fc43df8e33afe375cad47541ea686f1578ac30b93857955"
     },
     "status.climbing": {
-      "title": "Ugrás",
+      "title": "Mászás",
       "steps": [
         "Ön mász. Az mászás időt igényel, és ellenségek is léphetnek. Ellenőrizze a célpontot és a környező veszélyeket, amikor újra irányítást kap."
       ],
@@ -3605,9 +3605,9 @@
       "source_sha256": "66912b94ed346a3d5bf7b8d2bfba0b0ad2d2c697b57f4bf5937601b70754ef94"
     },
     "status.knocked_back": {
-      "title": "Hátracsap",
+      "title": "Hátralöktek",
       "steps": [
-        "Választ egy másik mezőre. Nézd meg a lábad alatt és a környező területeken lévő terepviszonyokat, valamint a közeli ellenfeleket azonnal; a mozgás veszélyt jelenthet, és teheted magad egy csapásra vagy más veszélybe."
+        "Egy másik mezőre löktek. Azonnal ellenőrizd, milyen terepen állsz, és kik az ellenfelek a közelben. A lökés csapdába vagy más veszélybe sodorhat."
       ],
       "source_sha256": "9958e811d72ddf7496540381799cc368816fc4d5f772cb4c7d0890035309a886"
     },
@@ -3647,21 +3647,21 @@
       "source_sha256": "69656654fecd87c4e7122da2d797ad7084e523fb0b58b40f39b803f286214e09"
     },
     "status.power_throw": {
-      "title": "A teljes erővel történő dobás készen áll",
+      "title": "Az Erőteljes hajítás készen áll",
       "steps": [
-        "„Erőteljes dobás” készen áll. Dobd a fegyverövbe a harci kardot vagy kézi kapust egy közeli ellenségre, miközben végezed a közelharcot. A két támadás külön-külön eldől, majd a védelem egyetlen próbája során a sikeres károk összeadják az eredményt. A közelharci fegyvered továbbra is használható."
+        "Az Erőteljes hajítás készen áll. Hajító lándzsát vagy kézi baltát dobhatsz a fegyverövedről egy szomszédos ellenfélre, miközben közelharci támadást indítasz ellene. A két támadásra külön dobsz. A találatok sebzése összeadódik, mielőtt az ellenfél egyszer dob a védelemre. A közelharci fegyvered aktív marad."
       ],
       "source_sha256": "17ce483ef21345b672af7ad50d9eb16456d8ba4e308ac4ec00c4ab084b3c0689"
     },
     "status.singing": {
-      "title": "Énekelnek",
+      "title": "Énekelsz",
       "steps": [
         "Énekelitek a megjelenített zenét, valamint, ha van, egy kisebb motívumot. A zenék használata elhasználja a hangot, és a hang nem regenerálódik, amíg énekelitek. Állítsátok le a zenét a \"Zene\" menüben, ha a hatás már nem hasznos."
       ],
       "source_sha256": "65e95be5e4d1f22df220ef758c5d490f52c09559966ed87323f7d95df80e0590"
     },
     "status.in_pit": {
-      "title": "Lyukban",
+      "title": "Gödörben",
       "steps": [
         "Ön egy járdában van, ahol az támadás és a kitérés hatására csökken. Ha megpróbál kimerülni, az egy másodpercet vesz igénybe. Ellenőrizze a környező ellenségeket és az saját életerőjét, mielőtt megpróbálja."
       ],
@@ -3696,14 +3696,14 @@
       "source_sha256": "dbd6d44e9cb1a518e534903baadd27af7e30dea5d5b52b483196532c7252e7a0"
     },
     "status.smithing": {
-      "title": "Fémöntés folyamat",
+      "title": "Kovácsolás folyamatban",
       "steps": [
         "A fémkovászat folyik. A megállapodott terv alapján a munkavégzés folytatódik. Ha megszakad, ellenőrizze a részben elkészült munkát és a fennmaradó költségeket, mielőtt folytatná."
       ],
       "source_sha256": "77a74ef2527822b1ed23a48d5853f9ea076cc8ed4ca3e1beab17678cbcca024d"
     },
     "status.fletching": {
-      "title": "Árnyékszálak készítése",
+      "title": "Nyílkészítés folyamatban",
       "steps": [
         "A nyílgyártás folyamatban van. Minden elkészült nyíl a megszokott időt és anyagokat igényel. Ha megszakad, ellenőrizd, hogy hány nyíl készült el, mielőtt újra elkezded."
       ],
@@ -3746,9 +3746,9 @@
       "source_sha256": "b85c89b23bb74b88561878bf681c5cfc81fde7632b84b55b0b1e7b86f2c26851"
     },
     "world.water": {
-      "title": "Mély víz",
+      "title": "Sekély víz",
       "steps": [
-        "A vízbe belépés, átjárás vagy kilépése lassú, és vízfelömlést okoz. Minden vízszintes mező, amelyet gyalogosan bejár, kis betegség kockázatot jelent. Ha gyorsaságra vagy rejtőzködésre van szükség, tervezz egy száraz útvonalat. A sikeres ugrás elkerüli a víz érintését, de a \"click-to-travel\" vízbe merít."
+        "A vízbe lépés, az átkelés és a kijutás lassabb, és csobbanással jár. Minden vízzel borított mező, amelyre gyalog lépsz, kis fertőzésveszéllyel jár. Ha gyorsan vagy észrevétlenül kell mozognod, tervezz száraz útvonalat. Sikeres ugrásnál nem érsz a vízhez, kattintásos mozgásnál azonban átgázolsz rajta."
       ],
       "source_sha256": "0d8c76b8e3504bbafb0776bf2bbeb16c9e82ddbc734931dc9079a71df8add203"
     },
@@ -3789,9 +3789,9 @@
       "source_sha256": "1b15d7fc433f5de2cfd77e140671d4587e60d2833bee9cf97e5c361ea55244a1"
     },
     "world.poison": {
-      "title": "Túlsős sav",
+      "title": "Mérgező sav",
       "steps": [
-        "A mérgező sav bevetése, vagy a savon való időtöltés mérgezést okoz. Ha meg kell állni, hogy meggyógyulj, vagy használj Antidot, akkor újra mérgezheted. A mérgezés elleni védelem csökkenti a hatást; egy sikeres ugrás elkerüli a kapcsolatot."
+        "Ha mérgező savba lépsz, vagy egy kört benne töltesz, újabb adag mérget kapsz. Lépj ki belőle, mielőtt gyógyítasz vagy ellenmérget használsz, különben ismét megmérgeződhetsz. A méregellenállás csökkenti a hatást. Sikeres ugrással elkerülheted az érintkezést."
       ],
       "source_sha256": "d3172f39639691505b20e5ea7a0d76920eb3e894a5d88af53ffabe2d24ba6b6d"
     },
@@ -3914,13 +3914,13 @@
     "terrain.101": {
       "title": "Áradásos csapó",
       "steps": [
-        "Ez a csapás egy mély vízű cellát hoz létre a helyed alatt. Minden következő két befejezett akciónál, ez tölti meg a következő, elérhető úton (legfeljebb nyolc cella, majd akár tizenhat), anélkül, hogy falakon átmenne; az úton lévő ajtók elpusztulnak és víz helyett. Az \"acid\" változatok helyette savat használnak. A második akción a víz áramlás közepét mély vízbe alakítja, ahol a mozgás négyszer több energiát igényel, és nem tudsz támadni.",
-        "Ellenőrizd a feltárult csapdát, mielőtt lépnél rá. Keresséld meg, vagy próbáld meg a \"Feloldás\" interakciót, és figyeld meg a kockázatokat. Ha a víz már elkezdett áradni, irányítsd a száraz terület felé; a menük olvasása nem fogja ezt megakadályozni, de a várakozás vagy egy másik cselekvés igen. A menüben: Disarm."
+        "A csapda először sekély vízzel árasztja el a mezőt alattad. A következő két befejezett műveleted után a víz eléri a következő bejárható gyűrűt, előbb legfeljebb nyolc, majd legfeljebb tizenhat mezőt. A falak megállítják a terjedést. Az útba eső ajtók megsemmisülnek, és a helyüket víz borítja. A savas változatban víz helyett sav árad. A második művelet után a vizes áradás közepe mély vízzé válik. Ott a mozgás a szokásos energia négyszeresébe kerül, és nem támadhatsz.",
+        "Mielőtt rálépsz egy felfedett csapdára, vizsgáld meg. Kerüld ki, vagy nézd meg a hatástalanítás lehetőségét és kockázatait. Ha az áradás már elkezdődött, indulj száraz talaj felé. A menük olvasása nem viszi előre az áradást. A várakozás és a többi művelet igen."
       ],
       "source_sha256": "41409581ae9e8d74d038b1711f8dd9dafa5e7afb23e44f7e00cc8c7c982a0be6"
     },
     "world.deepwater": {
-      "title": "Tükörvíz",
+      "title": "Mély víz",
       "steps": [
         "Ha mély vízbe, azon át vagy onnan kifelé úszol, a mozgás a szokásos energia négyszeresébe kerül. A víz alatt nem támadhatsz. Ha lehet, válassz száraz talajt vagy hidat. Mielőtt a vízbe mennél, tervezd meg, hol jutsz ki. Az úszás csobogással jár, és kis eséllyel meg is betegedhetsz."
       ],

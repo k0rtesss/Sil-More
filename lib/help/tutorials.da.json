@@ -410,9 +410,9 @@
       "source_sha256": "8d58c7eb4486bb4e5e87df5c41298c08dd3dce15f08ecb42fd5e3f2d4c2985ab"
     },
     "status.stun": {
-      "title": "Bedøvelse",
+      "title": "Fortumling",
       "steps": [
-        "{detail} Bedøvelse sænker alle færdigheder med 2, eller med 4 ved sværhedsgrad 50 og derover. Over 100 bliver du slået bevidstløs og kan ikke handle. Klarhed eller Miruvor fjerner bedøvelse; brug midlet, mens du stadig kan handle."
+        "{detail} Fortumling sænker alle færdigheder med 2, eller med 4, når graden er mindst 50. Over 100 bliver du bevidstløs og kan ikke handle. Klarhed eller Miruvor fjerner fortumling. Brug midlet, mens du stadig kan handle."
       ],
       "source_sha256": "3e8b128e72352e22428e57ba9475c2566409c7796684a4e1c19e379bd193140f"
     },
@@ -747,7 +747,7 @@
     "menu.settings": {
       "title": "Indstillinger",
       "steps": [
-        "Spilundervisningen har tre tilstande: Slået fra, Normal og Udvidet. Normal lærer dig grundlæggende handlinger og overlevelse. Udvidet går i detaljer. Du kan genlæse opdagede lektioner eller nulstille denne fortællings fremskridt særskilt. Vejledningen til enhedens betjening og rådene fra skeletter har egne indstillinger."
+        "Spilvejledningen har tre tilstande: Slået fra, Normal og Udvidet. Normal forklarer grundlæggende handlinger og overlevelse. Udvidet giver mere detaljeret vejledning. Du kan genlæse de lektioner, du har opdaget, eller nulstille vejledningsfremskridtet for denne fortælling særskilt. Betjeningsvejledningen og skelettips har egne indstillinger."
       ],
       "source_sha256": "ae082ca4977bc56d6c9f5214cc4bc9148d569956d1ea60eb551b36a444b69a2d"
     },
@@ -2676,7 +2676,7 @@
     "world.forge": {
       "title": "Ved en smedje",
       "steps": [
-        "En smedje har et begrænset antal anvendelser. Åbn Smithing ved smedjen for at se mulige genstande og prisen. Forslaget viser sværhedsgrad, materialer, tid og brug af smedjen før bekræftelsen. En opbrugt smedje kan ikke fremstille mere."
+        "En smedje har et begrænset antal ladninger. Åbn Smedning ved smedjen for at se, hvad du kan fremstille, og hvad det koster. Før du bekræfter, viser forhåndsvisningen sværhedsgraden, materialerne, tiden og forbruget af smedjeladninger. En smedje uden ladninger kan ikke bruges til at fremstille flere genstande."
       ],
       "source_sha256": "bfad51b7c10cba58b6c689df417a9a2593120603b70bcb227b89f338f4f25828"
     },
@@ -2711,7 +2711,7 @@
     "quest.progress": {
       "title": "Fremskridt i en opgave",
       "steps": [
-        "{detail} Se det resterende mål og begrænsningerne under Quests. Selv efter at have nået målet kan du skulle vende tilbage for at hente belønningen."
+        "{detail} Se det resterende mål og begrænsningerne under Opgaver. Selv efter at have nået målet kan du skulle vende tilbage for at hente belønningen."
       ],
       "source_sha256": "f01b40c27b5554bae219cbd79a200bc253080620dbd7c9973fcb8c36919bcf5e"
     },
@@ -2844,7 +2844,7 @@
     "quest.1": {
       "title": "Tulkas den Stærke",
       "steps": [
-        "{detail} Jagt det væsen, der er nævnt under Quests, og vend tilbage til Tulkas for belønningen. Læs om målets kendte angreb, før du møder det."
+        "{detail} Jagt det væsen, der er angivet under Opgaver, og vend tilbage til Tulkas for at få belønningen. Læs om målets kendte angreb, før du konfronterer det."
       ],
       "source_sha256": "122273fe7ed2b38312b361b2f5607c8b838595b2cc4905172a1b8532c3d6f2ad"
     },
@@ -2858,7 +2858,7 @@
     "quest.3": {
       "title": "Mandos Dommeren",
       "steps": [
-        "{detail} Følg Mandos’ mål vedrørende den bundne ånd, og hent belønningen. Det præcise mål står under Quests. Forlader du etagen før belønningen, opgiver du opgaven."
+        "{detail} Udfør Mandos’ opgave med at befri den bundne ånd, og hent derefter belønningen. Se det præcise mål under Opgaver. Forlader du etagen, før du får belønningen, opgiver du opgaven."
       ],
       "source_sha256": "a5e15e78f02946cbd295ae422bad111088902f615f8033c7085d13be31677443"
     },
@@ -2872,14 +2872,14 @@
     "quest.5": {
       "title": "Oromë, den store jæger",
       "steps": [
-        "{detail} Jagten tæller ulve, edderkopper, slanger og vampyrer hver for sig. Se de aktuelle tal under Quests. Ekstra drab i én gruppe opfylder ikke en anden gruppes krav."
+        "{detail} Jagten tæller ulve, edderkopper, slanger og vampyrer hver for sig. Se de aktuelle tal under Opgaver. Ekstra drab i én gruppe opfylder ikke en anden gruppes krav."
       ],
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },
     "quest.6": {
       "title": "Varda, Stjernernes Frue",
       "steps": [
-        "{detail} Se den afslørede destination under Quests. Vardas prøve foregår på den første etage, du når efter 500 fod. Dræb Duruin, før du forlader etagen, ellers går opgaven tabt. Planlæg din nedstigning på forhånd. Uudforskede steder er stadig ukendte."
+        "{detail} Se det afslørede bestemmelsessted under Opgaver. Vardas prøve foregår på den første etage, du når dybere end 500 fod. Dræb Duruin, før du forlader etagen, ellers går opgaven tabt. Planlæg nedstigningen, før du går ind på etagen. Uudforskede steder er stadig ukendte."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3949,7 +3949,7 @@
     "Select the item, then choose Ready.": "Vælg genstanden og derefter »Flyt til bæreselen«.",
     "Select the equipment you want to wear or wield.": "Vælg det udstyr, du vil tage på eller holde i hånden.",
     "Select an item to preview.": "Vælg en genstand at undersøge.",
-    "Select the required item and choose Use.": "Vælg den ønskede genstand og derefter Use.",
+    "Select the required item and choose Use.": "Vælg den genstand, du skal bruge, og vælg derefter »Brug«.",
     "Choose a Throwing row, then confirm the change.": "Vælg rækken »Throwing« for kastevåben, og bekræft skiftet.",
     "Make the requested selection in the open menu.": "Foretag det ønskede valg i den åbne menu.",
     "Throw active weapon": "Kast det aktive våben",
@@ -4075,7 +4075,7 @@
     "Stun %d: %+d to every skill.": "Bedøvelse %d: %+d til hver færdighed.",
     "%s drain changed from %d to %d. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.": "%s: tabet ændrede sig fra %d til %d. Egenskabsoversigten viser tab, udstyrsfradrag og udløbende bonusser hver for sig.",
     "Health: %d/%d. Read the last attack and its effects before acting again.": "Helbred: %d/%d. Se det sidste angreb og følgerne, før du handler igen.",
-    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Mindste dybde er nu %d fod. Spilhandlinger får tiden til at gå. Læsning koster ingen tid.",
+    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Mindste dybde er nu %d fod. Handlinger i spillet får dybdegrænsen til at rykke nedad. Læsning koster ingen spiltid.",
     "Pack space: %d.%d/%d.%d qt.": "Plads i rygsækken: %d,%d/%d,%d qt.",
     "Harness space: %d.%d/%d.%d qt.": "Plads i bæreselen: %d,%d/%d,%d qt.",
     "Arrows: %d. Current free Quiver space: %d.": "Pile: %d. Ledige pladser i koggeret: %d.",

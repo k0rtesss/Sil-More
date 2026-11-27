@@ -31,7 +31,7 @@
       "steps": [
         "{detail} Obě strany hodí dvacetistěnnou kostkou. Tvůj útok plus hod musí přesáhnout uhýbání cíle plus jeho hod. Při shodě mineš. Při stejných hodnotách zasáhneš o něco méně než v polovině případů.",
         "Při zásahu hoď na zranění a odečti hod cíle na ochranu. Zbroj může zabránit celému zranění. Například 8 zranění proti 3 ochraně ubere 5 zdraví. Hody uvidíš v historii boje.",
-        "Velký rozdíl proti uhýbání může přidat kritické kostky zranění. Lehčím zbraním stačí menší rozdíl. Zbraň na blízko o hmotnosti 3 lb obvykle dostává jednu kostku navíc při rozdílu 10 a dvě při 20. Finesse snižuje hranice na 8 a 16."
+        "Velký rozdíl proti uhýbání může přidat kritické kostky zranění. Lehčím zbraním stačí menší rozdíl. Zbraň na blízko o hmotnosti 3 lb obvykle dostává jednu kostku navíc při rozdílu 10 a dvě při 20. Jemnost snižuje hranice na 8 a 16."
       ],
       "source_sha256": "3ddcbbdc1e71dca2e3e61992b6ae4ef1221633525d5d566eb4064343e9e90e12"
     },
@@ -52,21 +52,21 @@
     "combat.surrounded": {
       "title": "Několik nepřátel v sousedství",
       "steps": [
-        "Kolem vás stojí několik nepřátel. Získávají bonus k útoku díky tomu, že vás obklopují. Vstup nebo úzká chodba může omezit, kolik z nich vás může napadnout najednou. \"Boj v davu\" snižuje jejich bonus k útoku."
+        "Stojí vedle tebe několik nepřátel. Za obklíčení dostávají bonus k útoku. Dveře nebo úzká chodba mohou omezit, kolik z nich na tebe dosáhne najednou. Schopnost Boj v davu snižuje bonus za obklíčení na polovinu."
       ],
       "source_sha256": "c3f14764b74a8ed09db31b7acc094e111e88869d43a24fccb3e82d6d121e85ab"
     },
     "combat.critical": {
       "title": "Kritické zásahy",
       "steps": [
-        "{detail} Kritický zásah přidává kostky zranění. Lehčí zbraně potřebují menší rozdíl při zásahu. Při boji zblízka Finesse zkracuje kritický interval o 2 a Power jej prodlužuje o 1. Subtlety jej s vhodnou zbraní a volnou druhou rukou zkrátí o další 2."
+        "{detail} Kritický zásah přidává kostky zranění. Lehčí zbraně potřebují menší rozdíl při zásahu. Při boji zblízka Jemnost zkracuje kritický interval o 2 a Pádnost jej prodlužuje o 1. Vytříbenost jej s vhodnou zbraní a volnou druhou rukou zkrátí o další 2."
       ],
       "source_sha256": "d11087fa085415de42d17ff51d890f23bcfb20017281a7c8d37678bd02884f41"
     },
     "world.depth": {
       "title": "Nové patro",
       "steps": [
-        "{detail} Schody a chodbové prostory vytvářejí novou mapu, když změníte hloubku. Opouštění úrovně znamená, že se její současná dispozice a zbývající předměty ztrácejí. Nejdříve zkontrolujte své cíle a zásoby; návrat do té hloubky vygeneruje novou mapu."
+        "{detail} Když změníš hloubku po schodišti nebo šachtou, hra vytvoří novou mapu. Opuštěním patra přijdeš o jeho současnou podobu i předměty, které v něm zůstaly. Nejdřív si zkontroluj cíl a zásoby. I když se vrátíš do stejné hloubky, mapa bude nová."
       ],
       "source_sha256": "e3271845b29a13dc6b4a96a2a12413dcf73f45bfc76a752e41afb50aa350f94a"
     },
@@ -200,7 +200,7 @@
     "item.throwing": {
       "title": "Vrhací zbraně",
       "steps": [
-        "Použití zbraní, které se hází, využívá dolet pro přesnost, s penalizací za vzdálenost. Umístěte jednu zbraně do opasku, poté ji vyberte v menu \"Změnit aktivní zbraň\" a poté ji házejte normálně. Některé schopnosti také umožňují rychlé hody bez nutnosti měnit aktivní zbraň. V nabídce: Change Active."
+        "Přesnost vrhacích zbraní určuje dovednost Boj zblízka. Větší vzdálenost přesnost snižuje. Připrav si vrhací zbraň na opasek a před běžným hodem ji vyber v nabídce „Změnit aktivní zbraň“. Některé schopnosti umožňují rychlý hod bez změny aktivní zbraně."
       ],
       "source_sha256": "002c3234ef47e8dbf5c525122cc0a7a3cdea763d1805d88b99329f37369bfaac"
     },
@@ -391,7 +391,7 @@
     "status.diseased": {
       "title": "Nemoc",
       "steps": [
-        "{detail} Při vystavení nákaze se vylosuje jedna z osmi nemocí. Vyléčenou nemoc už během této výpravy nedostaneš. Léčivá bylina, léčivý lektvar i Miruvor vyléčí každou nemoc i před diagnózou. Na angbandský mor nezabírá jiná bylina. Každá další nemoc má také náhodně určenou léčivou bylinu. Nákaza ihned sníží odolnost o 1 a pak každých 150 tahů hráče náhodnou vlastnost o 1, i při odpočinku. Hardiness prodlužuje interval na 300 tahů a snižuje riziko nákazy na polovinu. Se schopností Alchemy odhalí drahokam sebepoznání název nemoci i bylinu. Bez ní má každé použití 50% šanci odhalit název a po jeho zjištění 50% šanci odhalit bylinu. Lidští a elfští zajatci mohou za splnění úkolu určit úplnou diagnózu. Kromě moru mohou nemoc také rozpoznat a dát ti k jídlu jednu vhodnou bylinu. Léčba odstraní postihy nemoci a poskytne imunitu. Poznatky i imunita se ukládají. Léčící bylina v takovém případě neposkytuje obvyklé účinky ani výživu. Jiné byliny působí normálně."
+        "{detail} Při vystavení nákaze se vylosuje jedna z osmi nemocí. Vyléčenou nemoc už během této výpravy nedostaneš. Léčivá bylina, léčivý lektvar i Miruvor vyléčí každou nemoc i před diagnózou. Na angbandský mor nezabírá jiná bylina. Každá další nemoc má také náhodně určenou léčivou bylinu. Nákaza ihned sníží odolnost o 1 a pak každých 150 tahů hráče náhodnou vlastnost o 1, i při odpočinku. Houževnatost prodlužuje interval na 300 tahů a snižuje riziko nákazy na polovinu. Se schopností Alchemy odhalí drahokam sebepoznání název nemoci i bylinu. Bez ní má každé použití 50% šanci odhalit název a po jeho zjištění 50% šanci odhalit bylinu. Lidští a elfští zajatci mohou za splnění úkolu určit úplnou diagnózu. Kromě moru mohou nemoc také rozpoznat a dát ti k jídlu jednu vhodnou bylinu. Léčba odstraní postihy nemoci a poskytne imunitu. Poznatky i imunita se ukládají. Léčící bylina v takovém případě neposkytuje obvyklé účinky ani výživu. Jiné byliny působí normálně."
       ],
       "source_sha256": "f69e479dbfbf5105e334b545ae909112394825bedc565b0fad516b9b57f33494"
     },
@@ -536,14 +536,14 @@
       "source_sha256": "df7468de84c57cbd5177a4ca9cb41d90ce2145b41cfc3ed6796db64f60f6c5df"
     },
     "status.oppose_pois": {
-      "title": "Dočasná imunita vůči jedům",
+      "title": "Dočasná odolnost vůči jedu",
       "steps": [
         "Dočasná odolnost vůči jedu snižuje dopad nového jedu, zatímco je aktivní. Antidot odstraňuje jed, který již působí na vás. Jeskyně s jedem snižuje vaši odolnost, proto zkontrolujte aktuální celkovou hodnotu."
       ],
       "source_sha256": "f696afb8bbdf49f20e4f3e58afc4a2394b4662685a4f5b5bf975462f140b4e12"
     },
     "status.song_challenge_effect": {
-      "title": "Trvalý efekt „Výzva“",
+      "title": "Doznívající účinek Výzvy",
       "steps": [
         "{detail} Píseň má dočasný efekt \"Výzva\". Prohlédněte si aktuální rozdělení dovedností, abyste viděli aktivní modifikátor. Efekt a jeho zbývající trvání jsou odlišné od písně, kterou právě zpíváte."
       ],
@@ -626,7 +626,7 @@
     "status.afraid.remedy": {
       "title": "Léčba: strach",
       "steps": [
-        "Miruvor nebo Orcí alkohol odstraňuje strach. Orcí alkohol také může způsobit paralyzu, proto zvažte dostupné možnosti. Nyní je k dispozici známé léky. Pokud preferujete jinou akci, přeskočte.",
+        "Miruvor nebo skřetí pálenka odstraní strach. Skřetí pálenka může také omráčit, proto zvaž dostupné možnosti. Máš po ruce známý lék. Pokud chceš udělat něco jiného, lekci přeskoč.",
         "Vyber a použij známý prostředek proti strachu. Použitím vhodného předmětu cvičení dokončíš. Chceš-li si ho ponechat, zruš výběr nebo přeskoč lekci."
       ],
       "source_sha256": "5d3bc7fa647d11187cd6ee53e1d101ed6e4c6a7e2db407158888e8f421d269e2"
@@ -1077,15 +1077,15 @@
     "ability.15.preview": {
       "title": "Strážce (Warden)",
       "steps": [
-        "Strážce přidá polovinu rozdílu mezi vašimi investovanými do boje a lukostřelby do lukostřelby, zaokrouhlenou dolů. Pokud je lukostřelba vyšší, přidá se také třetina vašich investovaných do boje, zaokrouhlená nahoru. Bonusy z vybavení a atributů nejsou v tomto výpočtu zahrnuty.",
-        "Vaše první aktivní změna zbraně před následujícím akcí je zdarma – můžete přejít z boje na blízko na luk. Při použití schopnosti „Házet“ můžete také přecházet mezi bojem na blízko a házením, nebo mezi různými zbraněmi pro boj na blízko. Schopnost „Všestrannost“ vám také umožňuje přecházet mezi různými zbraněmi pro boj na blízko, nebo mezi luky."
+        "Pokud máš vyšší základní hodnotu Boje zblízka než Lukostřelby, Strážce přidá k Lukostřelbě polovinu rozdílu zaokrouhlenou dolů. Je-li současně aktivní Všestrannost, místo toho přidá třetinu základní hodnoty Boje zblízka zaokrouhlenou nahoru. Bonusy z výstroje a vlastností se do výpočtu nezahrnují.",
+        "První změna aktivní zbraně z boje zblízka na luk před další akcí nezabere čas. S Vrháním to platí i při přepnutí mezi zbraní na boj zblízka a vrhací zbraní nebo mezi dvěma zbraněmi na boj zblízka. S Všestranností to platí i při přepnutí mezi dvěma zbraněmi na boj zblízka nebo mezi dvěma luky."
       ],
       "source_sha256": "5dd794eb47016cb523d154c563c53e7a00e660970b2d27e97bff8dc4ab882fc9"
     },
     "ability.16.preview": {
       "title": "Silný hod (Power Throw)",
       "steps": [
-        "Po strávění tahu přípravou meče nebo čekáním, hodte šípem nebo ruční pilou z opasku na soupeře v blízkosti, při souboji. Hodte obě útoky samostatně proti obraně, sečtěte škody z úspěšných útoků a poté hodte jednou na obranu. Váš meč zůstává aktivní."
+        "Když strávíš tah přípravou zbraně pro boj zblízka nebo čekáním, můžeš po sousedním nepříteli hodit kopí či ruční sekeru z opasku a zároveň zaútočit zblízka. Na oba útoky se hází zvlášť proti úhybu. Poškození ze zásahů se sečte před jediným hodem na ochranu. Zbraň na boj zblízka zůstane aktivní."
       ],
       "source_sha256": "2cd156e91f84b252398b21033159276f973303929066473e826d737625964b0c"
     },
@@ -1127,8 +1127,8 @@
     "ability.25.preview": {
       "title": "Všestrannost (Versatility)",
       "steps": [
-        "Všestrannost přidá polovinu rozdílu mezi vašimi investovanými do lukostřelby a boje, přičemž se použije pouze menší část (zaokrouhleno dolů). Pokud je také aktivní postava Warden, přidá se jednu třetinu vašich investovaných do lukostřelby, přičemž se použije větší část (zaokrouhleno nahoru). Bonusy z vybavení a atributů nejsou v tomto výpočtu zahrnuty.",
-        "První změna aktivního zbraně před vaším dalším útokem je zdarma, a to z luk na bojové zbraně. Při použití schopnosti \"Házet\" můžete také přepínat mezi lukem a hody, nebo mezi luky. Schopnost \"Stráž\" umožňuje také přepínat mezi bojovými zbraněmi nebo mezi luky."
+        "Pokud máš vyšší základní hodnotu Lukostřelby než Boje zblízka, Všestrannost přidá k Boji zblízka polovinu rozdílu zaokrouhlenou dolů. Je-li současně aktivní Strážce, místo toho přidá třetinu základní hodnoty Lukostřelby zaokrouhlenou nahoru. Bonusy z výstroje a vlastností se do výpočtu nezahrnují.",
+        "První změna aktivní zbraně z luku na zbraň na boj zblízka před další akcí nezabere čas. S Vrháním to platí i při přepnutí mezi lukem a vrhací zbraní nebo mezi dvěma luky. Se Strážcem to platí i při přepnutí mezi dvěma zbraněmi na boj zblízka nebo mezi dvěma luky."
       ],
       "source_sha256": "e86a5fd3d00b207a3434b54efdf0dfe1f471e6231df621a59599e8abe61bacb7"
     },
@@ -1576,7 +1576,7 @@
     "ability.149.preview": {
       "title": "Píseň zkázy (Song of Slaying)",
       "steps": [
-        "Kritický úder v boji zabije cílovou postavu, pokud má cílová postava maximálně dvojnásobek vaší efektivní síly. Musí to být kritický úder; běžné údery tento efekt nevyvolávají."
+        "Kritický zásah zblízka zabije cíl, pokud mu zbývá nejvýše dvojnásobek tvé efektivní hodnoty Zpěvu v bodech zdraví. Běžné zásahy tento účinek nespustí."
       ],
       "source_sha256": "ec38d6c4fe2ef2ae8ccd79e5efa914047ae4a5f7a129df88fa38d5b71ec081c7"
     },
@@ -2165,7 +2165,7 @@
       "title": "Mírně hluboká voda",
       "steps": [
         "Pohyb po, přes nebo z mělké vody stojí o 50 % více času a snižuje skrytost o -3 díky šplhání. Stání na místě nemá žádný další náklad na pohyb. Voda zničí váš pachový stop, ale nepřátele stále mohou sledovat, pokud vás uvidí nebo uslyší.",
-        "Jsi-li zdravý, každé vodní pole, na které vstoupíš pěšky, má základní riziko vystavení nákaze 0,5 % před započtením imunity či schopnosti Hardiness. Při stání na místě se riziko nevyhodnocuje. Úspěšný skok zabrání kontaktu s vodou a šplouchnutí, přistání však stále vydá zvuk. Nemoc postupuje i při odpočinku. Léčivá bylina, léčivý lektvar nebo Miruvor vyléčí každou nemoc. Ostatní léčivé byliny nepůsobí na angbandský mor."
+        "Jsi-li zdravý, každé vodní pole, na které vstoupíš pěšky, má základní riziko vystavení nákaze 0,5 % před započtením imunity či schopnosti Houževnatost. Při stání na místě se riziko nevyhodnocuje. Úspěšný skok zabrání kontaktu s vodou a šplouchnutí, přistání však stále vydá zvuk. Nemoc postupuje i při odpočinku. Léčivá bylina, léčivý lektvar nebo Miruvor vyléčí každou nemoc. Ostatní léčivé byliny nepůsobí na angbandský mor."
       ],
       "source_sha256": "2db23b5559af8e90b15007a978cd514300ea076fe79efbe2e2467d404d8349cd"
     },
@@ -2473,7 +2473,7 @@
     "effect.382": {
       "title": "Strach — známý účinek",
       "steps": [
-        "Pokud ochrana proti strachu nebrání účinku, způsobuje strach po dobu 10d4 kol a snížení rychlosti po dobu 5d4 kol. Zamezení strachu také zabraňuje tomuto zvýšení rychlosti. Poskytuje běžnou výživu z bylin. Pokud toto léčí vaši současnou nemoc, léčí nemoc a obnovuje její negativní efekty místo toho, aby se uplatnily normální efekty nebo výživa; jinak se uplatní normální efekty."
+        "Pokud nezabere ochrana před strachem, bylina vyvolá strach na 10d4 tahů a zrychlí tě na 5d4 tahů. Pokud se ubráníš strachu, nedostaví se ani zrychlení. Bylina zasytí jako obvykle. Je-li tato bylina lékem na tvou současnou nemoc, vyléčí ji a vrátí body vlastností ztracené kvůli této nemoci. V takovém případě nezasytí ani nemá běžný účinek. Jinak působí normálně."
       ],
       "source_sha256": "5b77dbfdeeef100f3f8328f96e08cdb72200ab12abb9767e2154fa08863e8094"
     },
@@ -2487,7 +2487,7 @@
     "effect.384": {
       "title": "Obnova — známý účinek",
       "steps": [
-        "Obnovuje všechny atributy o až 3 body. Poskytuje také běžnou výživu z bylin. Neodstraňuje penalizace způsobené nepovazovaným vybavením. Pokud je to lék na vaši současnou nemoc, léčí nemoc a obnovuje její penalizace, namísto toho, aby se uplatnila normální účinnost nebo výživa; jinak se uplatní normální účinnost."
+        "Obnoví až 3 ztracené body každé vlastnosti a zasytí jako běžná bylina. Jiné postihy způsobené výstrojí zůstávají. Je-li tato bylina lékem na tvou současnou nemoc, vyléčí ji a vrátí body vlastností ztracené kvůli této nemoci. V takovém případě nezasytí ani nemá běžný účinek. Jinak působí normálně."
       ],
       "source_sha256": "e3a464206778421f8b685812d6e57e4173f32bd6c783f1b1044c41b29e41b990"
     },
@@ -2515,7 +2515,7 @@
     "effect.388": {
       "title": "Slabé stránky — známý účinek",
       "steps": [
-        "Snižuje sílu o 1 a poskytuje běžnou výživu z bylin. Výživa nezruší její negativní účinky. Pokud toto je léčba pro vaši současnou nemoc, léčí nemoc a obnoví její negativní účinky místo toho, aby se uplatnily normální účinky nebo výživa; jinak se uplatní normální účinky."
+        "Sníží Sílu o 1 bod a zasytí jako běžná bylina. Nasycení ztracenou Sílu nevrátí. Je-li tato bylina lékem na tvou současnou nemoc, vyléčí ji a vrátí body vlastností ztracené kvůli této nemoci. V takovém případě nezasytí ani nemá běžný účinek. Jinak působí normálně."
       ],
       "source_sha256": "990fd3d5b050fd0a4ae48e266ac26a598e4ac98b8ebbb5419ff79a90cd2e797b"
     },
@@ -2604,56 +2604,56 @@
       "source_sha256": "dda38dd3b88e9b72cea092ddf630c98ca9b8d9bddf7c817f7c2a519808f8088f"
     },
     "storage.pack": {
-      "title": "Skladování vybavení",
+      "title": "Ukládání do batohu",
       "steps": [
         "{detail} Batoh má vlastní limit objemu. Váha také přispívá k celkové zátěži. Pečlivě zkontrolujte oba limity, když vybíráte, co si vzít; malý, ale těžký předmět a objemný, ale lehký předmět představují různé omezení."
       ],
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
-      "title": "Kapacita nádrže",
+      "title": "Kapacita opasku",
       "steps": [
         "{detail} Opasek má samostatný limit pro objem, který lze nést, od objemu batohu. Vybavení, které je připravené, lze použít podle vlastních pravidel. Přesun předmětu mezi různými úložnými místy nezvyšuje celkový limit pro nošení na neomezenou hodnotu."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
     "storage.quiver": {
-      "title": "Kapacita pouzdra",
+      "title": "Kapacita toulce",
       "steps": [
-        "{detail} Toulec obsahuje šípy podle vlastních pravidel. Pokud je potřeba více šípů, mohou být uloženy v batohu. Hromada šípů lze zvednout pouze částečně, pokud se do něj vejde pouze část; zkontrolujte, kolik šípů bylo skutečně shromážděno."
+        "{detail} Toulec má vlastní kapacitu na šípy. Šípy navíc mohou vyžadovat místo v batohu. Pokud se vejde jen část hromádky, můžeš sebrat pouze tuto část. Zkontroluj, kolik šípů jsi skutečně sebral."
       ],
       "source_sha256": "2901f8607c5fd29a7981ace679d30d65bec33cc9a7dd2ee160cf5d5901a7d403"
     },
     "storage.weight": {
-      "title": "Nosnost",
+      "title": "Nesená hmotnost",
       "steps": [
         "Nosnost je odlišná od objemu, který můžete využít pro uložení. Těžké nákladné věci mohou zpomalit vaše pohyby, i když máte k dispozici místo pro další předměty. Zkontrolujte aktuální zatížení a zvažte, zda necháte za sebou nepotřebné těžké vybavení."
       ],
       "source_sha256": "13beba1f2d1595f6ba75a4ba3519f791ed15c82ba0f795552a90818a63c498eb"
     },
     "storage.pack_access": {
-      "title": "Přístup do balíčku",
+      "title": "Přístup do batohu",
       "steps": [
         "Tato akce \"Pack\" trvá tři kola. Nepřátelé mohou jednat během těchto kol a útok nebo vaše zrušení může akci přerušit. Pokud je to možné, připravte si důležité vybavení před bojem."
       ],
       "source_sha256": "68ce9a0651f5cd3b3f6f0cfa00a4a9173c9b2b10234538843f40c2b11cad2386"
     },
     "storage.pack_interrupted": {
-      "title": "Přerušeno připojení k balíčku",
+      "title": "Přístup do batohu byl přerušen",
       "steps": [
         "Útok přerušil akci s batoh, než byla dokončena. Zkontrolujte aktuální umístění předmětu a historii zpráv. Možná budete muset odejít od nebezpečí, než se pokusíte znovu."
       ],
       "source_sha256": "61323a01ebeb2584613eb833876bb048ed0ffdec5a8c84817e70dcd5c5098565"
     },
     "storage.partial_pickup": {
-      "title": "Pouze část stěny se vejde.",
+      "title": "Vejde se jen část hromádky",
       "steps": [
-        "Pouze část zásob se vešla do dostupného úložného prostoru. Zkontrolujte, kolik položek jste shromáždili a zda jsou nějaké položky stále na podlaze. Pokud chcete vzít více, využijte volný prostor nebo vyberte jinou lokaci pro uložení."
+        "Do dostupného prostoru se vešla jen část hromádky. Zkontroluj, kolik předmětů jsi sebral a které zůstaly na zemi. Chceš-li sebrat další, uvolni místo nebo zvol jiné úložiště."
       ],
       "source_sha256": "0fd1a7bb882e490e84224ed873a113e86fe8dde1b2335844098cc81e2b618929"
     },
     "world.rest": {
-      "title": "Odpočinek zabere několik kol",
+      "title": "Odpočinek stojí tahy",
       "steps": [
         "Postoj opakuje tahy, dokud není dosaženo cíle, nebo dokud se něco nestane. Nepřátelé a časovač s minimální hloubkou pokračují. Otravné, krvácení a hlad zastavují běžné zotavení zdraví; zpěv zastavuje zotavení hlasu. Léčte nemoci před dlouhým odpočinkem."
       ],
@@ -2681,14 +2681,14 @@
       "source_sha256": "bfad51b7c10cba58b6c689df417a9a2593120603b70bcb227b89f338f4f25828"
     },
     "world.light_low": {
-      "title": "Palivo je téměř vyhozeno",
+      "title": "Dochází palivo",
       "steps": [
         "Váš vybavení, konkrétně zdroj energie, je téměř vyčerpán. Najděte kompatibilní náplň nebo připravte náhradní díl, než dojde. Doplnění paliva nebo výměna vybavení zabere čas, proto se připravte, než se setkáte s nepřáteli."
       ],
       "source_sha256": "8786e11b6583b0e43678408501a1fee7bba9d4b250417c993581f86c9ac20971"
     },
     "world.light_out": {
-      "title": "Váš zdroj světla byl zhasnut",
+      "title": "Světlo zhaslo",
       "steps": [
         "Váš vybavený světelný zdroj se vyčerpal. \"Doplňte\" ho, nebo pokud je to možné, použijte náhradní zdroj. Uložená mapa zůstává viditelná, ale nezobrazuje všechny hrozby v tmě. V nabídce: Refuel."
       ],
@@ -2709,7 +2709,7 @@
       "source_sha256": "2b4161dcbbd69c5bd45ee2c74afed130b628a8d85a4ad4b9dd5031559f78ea79"
     },
     "quest.progress": {
-      "title": "Pokrok ve hře",
+      "title": "Postup v úkolu",
       "steps": [
         "{detail} Pro zjištění zbývajícího cíle a případných omezení, podívejte se na sekci \"Úkoly\". Dosáhnout cíle může stále vyžadovat návrat, aby bylo možné získat odměnu. V nabídce: Quests."
       ],
@@ -2737,14 +2737,14 @@
       "source_sha256": "643c4cbab6770e7477f7c02610dba41bb45d22e064014e86effdc4c084978e56"
     },
     "tale.blessing": {
-      "title": "Dostupná je dar",
+      "title": "Je dostupné požehnání",
       "steps": [
         "{detail} Před výběrem kouzla si přečtěte jeho výhody, náklady a omezení. Můžete porovnávat možnosti bez použití bodů kouzel."
       ],
       "source_sha256": "bb101021c2c3f77bc9fc79a28deaa4ab6164ca1981ff0b35d8d3beb71ac6f5bb"
     },
     "tale.oath_break": {
-      "title": "Slíbené bylo porušeno",
+      "title": "Byla porušena přísaha",
       "steps": [
         "{detail} Vaše akce porušila slib. Zkontrolujte ztracený bonus a případnou odhalenou prokletí, poté naplánujte další postup s ohledem na novou situaci. Další hrdina v příběhu může čelit následkům."
       ],
@@ -2772,14 +2772,14 @@
       "source_sha256": "97086548aea5756ac3307792960260358a76f3197b26b4c18af867885488efe7"
     },
     "tale.truce": {
-      "title": "Příměti",
+      "title": "Příměří",
       "steps": [
         "{detail} Je v platnosti příměti. Předtím, než zaútočíte nebo narušíte dohodu, si přečtěte její podmínky. Některé akce mohou příměti ukončit a vystavit vás okamžitému nebezpečí."
       ],
       "source_sha256": "8e41d388ec62a117db5136d35c880ab988cc5ca97f50a8df132ffad0e4d5ee6a"
     },
     "world.partition.1": {
-      "title": "Prostory s dostatečným prostorem",
+      "title": "Prostorné sály",
       "steps": [
         "{detail} Pokojí nabízí dveře, které vám pomohou kontrolovat nepřátele; najděte si únikovou cestu, než přejdete otevřený prostor. Předměty na podlaze upřednostňují zbraně a brnění před šperky."
       ],
@@ -2793,7 +2793,7 @@
       "source_sha256": "ad27e2bd211eda12cf2dfa3b81404546eecba3cffff9325ade79f32477586c72"
     },
     "world.partition.3": {
-      "title": "Zničené sály",
+      "title": "Zřícené sály",
       "steps": [
         "{detail} Ruiny se skládají z rozpadlých konstrukcí a nepravidelných chodeb. Zkontrolujte, zda se stále otevírají dveře. Získané předměty zahrnují zbraně, brnění a zásoby; poškozené vybavení se může objevit."
       ],
@@ -2807,7 +2807,7 @@
       "source_sha256": "6a8e92396417cc8516de5c98afb86fa631b33d6090abdb369bfbb9ccbd64eaee"
     },
     "world.partition.5": {
-      "title": "Region propadlé doliny",
+      "title": "Oblast propastí",
       "steps": [
         "{detail} Propasti rozdělují tuto oblast. Pád může způsobit zranění a přenést vás hlouběji. Před každým přechodem zkontrolujte, zda je bezpečný, a zvažte, zda je nutné skákat. Hledejte padlé vybavení u okrajů, ale vyhněte se boji na úzkých mostech. Hvězdný železo se může objevit na vhodných hloubkách."
       ],
@@ -2842,44 +2842,44 @@
       "source_sha256": "0b6e1d31b20ee4e615bf7824a0ae2839d0ebad99ca4e4a04afccaeb834544a12"
     },
     "quest.1": {
-      "title": "Tulka, mocný",
+      "title": "Tulkas Silný",
       "steps": [
-        "{detail} Lovte stvoření, jak je popsáno v sekci \"Úkoly\", a poté se vraťte do Tulkas, kde obdržíte odměnu. Před konfrontací se stvořením si nejprve ověřte, jaké útoky již zná. V nabídce: Quests."
+        "{detail} Ulov tvora uvedeného v nabídce Úkoly a vrať se k Tulkasovi pro odměnu. Než se s ním utkáš, ověř si, co víš o jeho útocích."
       ],
       "source_sha256": "122273fe7ed2b38312b361b2f5607c8b838595b2cc4905172a1b8532c3d6f2ad"
     },
     "quest.2": {
-      "title": "Aulë, kovář",
+      "title": "Aulë Kovář",
       "steps": [
-        "{detail} Vytvořte dílo, které splňuje současné požadavky Aulé, a poté si vyzvedněte odměnu. Před použitím materiálů si přečtěte cílový úkol a návrh na výrobu. Pokud odstupíte od tohoto úlevelu, než obdržíte odměnu, úkol se zruší."
+        "{detail} Vykuj předmět, který splňuje aktuální Aulëho požadavky, a vyzvedni si odměnu. Než spotřebuješ materiál, přečti si zadání a zkontroluj návrh výrobku. Pokud patro opustíš před převzetím odměny, úkol propadne."
       ],
       "source_sha256": "4a57218cb48c385ecaa5c1f64a58c52a285cfdfd9dec6591958f371a3a2295f5"
     },
     "quest.3": {
-      "title": "Mandos, pán osudu",
+      "title": "Mandos Soudce",
       "steps": [
-        "{detail} Postupujte podle cíle Mandosa ohledně spoutaného ducha, poté si vyzvedněte odměnu. Podrobnosti o cíli naleznete v sekci \"Úkoly\". Pokud tuto úroveň dokončíte, aniž byste obdrželi odměnu, úkol se zruší. V nabídce: Quests."
+        "{detail} Splň Mandosův úkol týkající se spoutaného ducha a vyzvedni si odměnu. Přesný cíl najdeš v nabídce Úkoly. Pokud patro opustíš před převzetím odměny, úkol propadne."
       ],
       "source_sha256": "a5e15e78f02946cbd295ae422bad111088902f615f8033c7085d13be31677443"
     },
     "quest.4": {
-      "title": "Nienna, Dáma soucitu",
+      "title": "Nienna, paní soucitu",
       "steps": [
-        "{detail} Najděte schody, které vedou dolů, aniž byste někoho zabili, a poté postupujte podle pokynů pro získání odměny, než odejdete. Vyhněte se efektům, které mohou způsobit smrt, včetně automatických následných útoků. Odechod z úrovně před získáním odměny znamená, že tento úkol je nedokončen."
+        "{detail} Najdi schody dolů, aniž bys někoho zabil, a před odchodem se řiď pokyny k získání odměny. Vyhýbej se účinkům, které mohou zabít, včetně automatických následných útoků. Pokud patro opustíš před převzetím odměny, zkouška propadne."
       ],
       "source_sha256": "54fceb5f8fb865850d9e2c767b5fd0e8b2bc8fe8cc8f57cb3e7b881c304ebeea"
     },
     "quest.5": {
       "title": "Oromë, Velký lovčí",
       "steps": [
-        "{detail} Lov se zaměřuje na vlky, pavouky, hadi a upíry samostatně. Zkontrolujte každý aktuální součet v sekci \"Úkoly\". Zabíjení více jedinců z jedné skupiny nezplní požadavky jiné skupiny. V nabídce: Quests."
+        "{detail} Vlci, pavouci, hadi i upíři se při lovu počítají zvlášť. Aktuální počty najdeš v nabídce Úkoly. Přebytečné úlovky z jedné skupiny se nezapočítávají do jiné."
       ],
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },
     "quest.6": {
-      "title": "Varda, dáma hvězd",
+      "title": "Varda, paní hvězd",
       "steps": [
-        "{detail} Zkontrolujte sekci \"Úkoly\" pro určení cíle. Zkouška Vardy se odehrává na prvním úrovni, kterou dosáhnete po 500 stopách; porazte Duruina, než opustíte tuto úroveň, jinak úkol ztratíte. Naplánujte si sestup, než vstoupíte; neprozkoumané lokace zůstanou neznámé. V nabídce: Quests."
+        "{detail} V nabídce Úkoly zkontroluj odhalený cíl. Vardina zkouška se odehrává v prvním patře, kam se dostaneš hlouběji než 500 stop. Zabij Duruina, než z patra odejdeš, jinak úkol propadne. Sestup si naplánuj předem. Neprozkoumaná místa zůstávají neznámá."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3556,23 +3556,23 @@
       "source_sha256": "9acdbdf034fb6f517ac6777e0d382f4aa0f7c321b9bb88e781dd71fb002f1df5"
     },
     "status.heavy_stun": {
-      "title": "Silný paralyzující efekt",
+      "title": "Těžké omráčení",
       "steps": [
-        "Úroveň paralyzace je minimálně 50, takže každá dovednost je snížena o 4. Pokud je hodnota vyšší než 100, ztratíte schopnost jednat. Clarity nebo Miruvor mohou paralyzaci zrušit, přičemž stále můžete použít předmět."
+        "Míra omráčení je nejméně 50, takže všechny dovednosti klesají o 4. Nad 100 nemůžeš jednat. Dokud ještě můžeš použít předmět, Zjasnění mysli (Clarity) nebo Miruvor mohou omráčení odstranit."
       ],
       "source_sha256": "d2041d74ca364183b6ff7819e6677204dd809860e3c181ad8a93fff4c4ed47c5"
     },
     "status.knocked_out": {
-      "title": "Porazeno",
+      "title": "V bezvědomí",
       "steps": [
-        "Úroveň paralyzace je vyšší než 100. Nemůžete jednat, dokud se tato hodnota nedostatečně sníží, aby se vám podařilo se zotavit. \"Continue\" ukončí vysvětlení; možnosti se stanou dostupné, až budete opět moci jednat."
+        "Míra omráčení je nad 100. Dokud dostatečně neklesne, nemůžeš jednat. „Pokračovat“ zavře vysvětlení. Léčivé prostředky můžeš použít, až budeš znovu moci jednat."
       ],
       "source_sha256": "9cbfc77d25d5d1d3e250b9f1eb3fdd3dc9204907e52edad5d2e51accfbfc74cd"
     },
     "status.full": {
-      "title": "Kompletní",
+      "title": "Sytost",
       "steps": [
-        "Máte dostatek potravy pro tuto chvíli. Uložte si potravu na později, pokud ji nepotřebujete pro jiný účel. \"Full\" označuje váš zásobník jídla, nikoli vaše zdraví nebo hlas."
+        "Prozatím máš dost výživy. Jídlo si nech na později, pokud nepotřebuješ některý z dalších účinků byliny. Sytost označuje zásobu výživy, nikoli zdraví ani hlas."
       ],
       "source_sha256": "932c011b434c5fab5d60bc0d874351686bc760fa5397656e4afe7db36996066c"
     },
@@ -3591,7 +3591,7 @@
       "source_sha256": "cef995d8d3750ed09fc43df8e33afe375cad47541ea686f1578ac30b93857955"
     },
     "status.climbing": {
-      "title": "Vystupování",
+      "title": "Šplhání",
       "steps": [
         "Vy se pohybujete po strmém svahu. Dokončení výstupu zabere čas, a nepřátelé mohou jednat. Zkontrolujte cílový bod a potenciální hrozby v okolí, jakmile získáte zpět kontrolu."
       ],
@@ -3605,7 +3605,7 @@
       "source_sha256": "66912b94ed346a3d5bf7b8d2bfba0b0ad2d2c697b57f4bf5937601b70754ef94"
     },
     "status.knocked_back": {
-      "title": "Zraněn",
+      "title": "Odhození",
       "steps": [
         "Jste posunuti na jiné pole. Okamžitě zkontrolujte terén pod nohama a okolní nepřátele; posun vás může dostat do pasti nebo jiné nebezpečné situace."
       ],
@@ -3647,21 +3647,21 @@
       "source_sha256": "69656654fecd87c4e7122da2d797ad7084e523fb0b58b40f39b803f286214e09"
     },
     "status.power_throw": {
-      "title": "Připraven k úderu",
+      "title": "Silný hod je připraven",
       "steps": [
-        "„Power Throw“ je připraven. Hodte šíp nebo ruční seky z opasku na nepřítele v sousední pozici, zatímco útočíte v boji na blízko. Obě útoky se hodí samostatně; úspěšná škoda se sečte před jedním hodem na obranu. Vaše zbraň pro boj na blízko zůstává aktivní."
+        "Silný hod je připraven. Hoď kopí nebo ruční sekeru z opasku po sousedním nepříteli a zároveň zaútoč zblízka. Na oba útoky se hází zvlášť. Poškození ze zásahů se sečte před jediným hodem na ochranu. Zbraň na boj zblízka zůstane aktivní."
       ],
       "source_sha256": "17ce483ef21345b672af7ad50d9eb16456d8ba4e308ac4ec00c4ab084b3c0689"
     },
     "status.singing": {
-      "title": "zpíváte",
+      "title": "Zpíváš",
       "steps": [
         "Popsáváte písničku, kterou je zobrazená, a případně i menší melodii. Písně spotřebovávají hlas, a hlas se během zpěvu nemůže obnovit. Použijte menu Písně, když už efekt není užitečný."
       ],
       "source_sha256": "65e95be5e4d1f22df220ef758c5d490f52c09559966ed87323f7d95df80e0590"
     },
     "status.in_pit": {
-      "title": "V jámu",
+      "title": "V jámě",
       "steps": [
         "Nacházíte se v jámu, kde vaše útok a uhýbání jsou sníženy na polovinu. Pokus o vyběhnutí znamená pokus o výstup, což může selhat a zabere jeden tah. Před pokusem zkontrolujte nepřátele v okolí a své zdraví."
       ],
@@ -3696,14 +3696,14 @@
       "source_sha256": "dbd6d44e9cb1a518e534903baadd27af7e30dea5d5b52b483196532c7252e7a0"
     },
     "status.smithing": {
-      "title": "Průběžné kování",
+      "title": "Probíhá kování",
       "steps": [
         "Práce na kovářství probíhá. Práce pokračují po dobu stanovenou přijatou nabídkou. Pokud je práce přerušena, zkontrolujte nedokončenou práci a zbývající náklady, než se budete znovu věnovat."
       ],
       "source_sha256": "77a74ef2527822b1ed23a48d5853f9ea076cc8ed4ca3e1beab17678cbcca024d"
     },
     "status.fletching": {
-      "title": "Postup při výrobě lukových šípů",
+      "title": "Probíhá výroba šípů",
       "steps": [
         "Výroba šípů je v běhu. Každý vyrobený šíp vyžaduje normální čas a materiály. Pokud je výroba přerušena, zkontrolujte, kolik šípů bylo vyrobeno, a poté pokračujte."
       ],
@@ -3746,9 +3746,9 @@
       "source_sha256": "b85c89b23bb74b88561878bf681c5cfc81fde7632b84b55b0b1e7b86f2c26851"
     },
     "world.water": {
-      "title": "Mírně hluboká voda",
+      "title": "Mělká voda",
       "steps": [
-        "Pohyb po vodě, přes ni nebo z ní, je pomalejší a způsobuje vlny. Každý vodní prostor, který vstoupíte pěšky, má malou šanci na onemocnění. Naplánujte si suchou trasu, pokud potřebujete rychlost nebo nenápadnost. Úspěšný skok zabrání kontaktu s vodou, ale pohyb pomocí klikání je pomalejší."
+        "Vstup do vody, brodění i výstup z ní trvají déle a šplouchají. Každé vodní pole, na které vstoupíš pěšky, představuje malé riziko nákazy. Potřebuješ-li rychlost nebo nenápadnost, drž se suché cesty. Úspěšný skok tě udrží mimo vodu, při pohybu kliknutím se jí však brodíš."
       ],
       "source_sha256": "0d8c76b8e3504bbafb0776bf2bbeb16c9e82ddbc734931dc9079a71df8add203"
     },
@@ -3791,7 +3791,7 @@
     "world.poison": {
       "title": "Jedovatá kyselina",
       "steps": [
-        "Vystavení se jedovaté kyselině pěšky, nebo strávení na ní kol, přidá jed. Nechte ji, než se budete léčit nebo použít Antidot, jinak vás může jed znovu postihnout. Odolnost vůči jedu snižuje vystavení; úspěšný skok zabrání kontaktu."
+        "Vstup do jedovaté kyseliny i každý tah strávený v ní zvyšují otravu. Nejdřív z kyseliny vystup, teprve potom se leč nebo použij protijed, jinak se můžeš znovu otrávit. Odolnost vůči jedu snižuje účinek kyseliny. Úspěšným skokem se kontaktu vyhneš."
       ],
       "source_sha256": "d3172f39639691505b20e5ea7a0d76920eb3e894a5d88af53ffabe2d24ba6b6d"
     },
@@ -3907,14 +3907,14 @@
       "title": "Hluboká voda",
       "steps": [
         "Pohyb do, přes nebo z hluboké vody vyžaduje čtyřnásobnou energii ve srovnání s normálním pohybem. Nemůžete útočit, když jste ponoření. Naplánujte si trasu na suchou půdu před vstupem; most poskytuje suché místo nad vodou.",
-        "Plavání šplouchá a snižuje plížení o 3. Jsi-li zdravý, každé vodní pole, na které vstoupíš, má základní riziko vystavení nákaze 0,5 % před započtením imunity či schopnosti Hardiness. Když zůstaneš na místě, nevzniká další postih za pohyb ani nové riziko nákazy. Útočit můžeš až po návratu na pevný podklad."
+        "Plavání šplouchá a snižuje plížení o 3. Jsi-li zdravý, každé vodní pole, na které vstoupíš, má základní riziko vystavení nákaze 0,5 % před započtením imunity či schopnosti Houževnatost. Když zůstaneš na místě, nevzniká další postih za pohyb ani nové riziko nákazy. Útočit můžeš až po návratu na pevný podklad."
       ],
       "source_sha256": "c331749fe6aedf1c8db6da3ec67ee1d26b863d86956dfb50b1178d8198b45612"
     },
     "terrain.101": {
-      "title": "Pastýřská past",
+      "title": "Záplavová past",
       "steps": [
-        "Tato past uvolní jednu mělkou vodní buňku pod vámi. Po každé z vašich následujících dvou úspěšných akcí, naplní další cestou dosažitelný kruh (až osm buněk, poté až šestnáct) bez překračování zdí; dveře na cestě jsou zničeny a nahrazeny vodou. Verze s kyselinou používají kyselinu místo vody. Druhou akcí se střed vodního proudu stane hlubokou vodou, kde pohyb vyžaduje čtyřnásobnou energii a nemůžete útočit.",
+        "Po spuštění pasti se pole pod tebou zaplní mělkou vodou. Po každé z následujících dvou dokončených akcí voda zaplaví další prstenec dostupných polí, nejdřív až osm a pak až šestnáct. Stěnami voda neprojde. Dveře v cestě se zničí a jejich pole zaplaví voda. U kyselinové varianty se místo vody rozlije kyselina. Po druhé akci se střed vodní záplavy změní v hlubokou vodu. Pohyb v ní stojí čtyřnásobek běžné energie a nemůžeš v ní útočit.",
         "Prohlédněte si pasti, které byly odhaleny, než na ně vstoupíte. Obcházejte je, nebo použijte interakci \"Odstranit pasti\" a zvažte její rizika. Pokud už začala povodňová vlna, snažte se dostat na suché místo; čtení menu to nezrychlí, ale čekání nebo jiná akce ano. V nabídce: Disarm."
       ],
       "source_sha256": "41409581ae9e8d74d038b1711f8dd9dafa5e7afb23e44f7e00cc8c7c982a0be6"

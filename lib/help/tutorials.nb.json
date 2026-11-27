@@ -410,9 +410,9 @@
       "source_sha256": "8d58c7eb4486bb4e5e87df5c41298c08dd3dce15f08ecb42fd5e3f2d4c2985ab"
     },
     "status.stun": {
-      "title": "Bedøvelse",
+      "title": "Fortumling",
       "steps": [
-        "{detail} Stun reduserer alle ferdigheter med 2, eller med 4 ved alvorlighetsgrad 50 eller høyere. Ved 100 eller høyere, blir du beveget og kan ikke handle. Klarhet eller Miruvor fjerner stun; bruk det mens du fortsatt kan handle."
+        "{detail} Fortumling senker alle ferdigheter med 2, eller med 4 når graden er minst 50. Over 100 blir du bevisstløs og kan ikke handle. Klarhet eller Miruvor fjerner fortumlingen. Bruk middelet mens du ennå kan handle."
       ],
       "source_sha256": "3e8b128e72352e22428e57ba9475c2566409c7796684a4e1c19e379bd193140f"
     },
@@ -447,7 +447,7 @@
     "status.entranced": {
       "title": "Transe",
       "steps": [
-        "Du er i en transetilstand og kan ikke handle før transen er over. Du kan ikke velge eller drikke et middel under transen. «Continue» avslutter forklaringen, slik at spillet kan fortsette."
+        "Du er i transe og kan ikke handle før den er over. Du kan heller ikke velge eller drikke et middel mens du er i transe. Velg «Fortsett» for å lukke forklaringen og gå tilbake til spillet."
       ],
       "source_sha256": "2487d8d8462bf8e80d186741b4f61cd18b18a05a37b097bec81310feb13d9d63"
     },
@@ -587,7 +587,7 @@
     "status.starving": {
       "title": "Utsulting",
       "steps": [
-        "{detail} Sult forårsaker skade og hindrer helbredelse. Spis kjent, næringsrik mat så raskt som mulig. Et helende gjenstand alene vil ikke fikse skaden."
+        "{detail} Utsulting gjør skade og hindrer helsen i å komme seg. Spis kjent, næringsrik mat så fort som mulig. Et helbredende middel alene fjerner ikke årsaken til skaden."
       ],
       "source_sha256": "5c9f10f645ee2a7b36c612a33886c0e42a5689469701626ecb228f43c533bf25"
     },
@@ -1576,7 +1576,7 @@
     "ability.149.preview": {
       "title": "Drapets sang (Song of Slaying)",
       "steps": [
-        "Et kritisk nærkampangrep dreper målet hvis målets helse er lik eller lavere enn dobbelt så mye som din effektive stemme. Det må være et kritisk angrep; vanlige angrep utløser ikke denne effekten."
+        "Et kritisk nærkamptreff dreper målet hvis helsen er høyst dobbelt så høy som din effektive sangverdi. Vanlige treff utløser ikke effekten."
       ],
       "source_sha256": "ec38d6c4fe2ef2ae8ccd79e5efa914047ae4a5f7a129df88fa38d5b71ec081c7"
     },
@@ -2150,7 +2150,7 @@
     "terrain.82": {
       "title": "Sjakt opp",
       "steps": [
-        "En oppadgående trapp kan stige høyere enn en vanlig trapp, men minimumsdybden kan føre deg til samme dybde eller enda dypere. Reglene for eder gjelder fortsatt. Les destinasjonen før du forlater; kartet er nylig generert."
+        "En sjakt oppover kan føre deg høyere enn en vanlig trapp, men minstedybden kan føre til at du havner på samme dybde eller enda dypere. Begrensningene i eden gjelder fortsatt. Sjekk hvor sjakten fører før du går. Et nytt kart blir generert."
       ],
       "source_sha256": "611a70f61c0926db1e59742dbcf4019915ec55ee23de71386f11bc936ae20033"
     },
@@ -2606,14 +2606,14 @@
     "storage.pack": {
       "title": "Ryggsekkplass",
       "steps": [
-        "{detail} Ryggsekken har sin egen vektgrense. Vekten bidrar også til den totale lasten. Les begge grensene når du velger hva du skal bære: Et lite, men tungt objekt og et stort, lett objekt skaper forskjellige begrensninger."
+        "{detail} Ryggsekken har en egen volumgrense. Vekten av gjenstandene teller med i den totale lasten. Sjekk begge grensene når du velger hva du vil bære. En liten, tung gjenstand øker lasten, mens en stor, lett gjenstand tar mye plass."
       ],
       "source_sha256": "c7daf084bb6dbb295be7eef3e91b4bbe40fb8ff5c0d7512e277325ee2849a66d"
     },
     "storage.harness": {
       "title": "Bæreselens kapasitet",
       "steps": [
-        "{detail} Bæreselen har en egen grense for hvor mye den kan bære, uavhengig av ryggsekken. Utstyret som er klart, kan hentes ved hjelp av egne regler. Å flytte et objekt mellom lagringsplasser, skaper ikke en ubegrenset total kapasitet for å bære."
+        "{detail} Bæreselen har en egen volumgrense, uavhengig av ryggsekken. Klargjort utstyr kan hentes etter egne handlingsregler. Grensene for den totale lasten gjelder også når du flytter gjenstander mellom oppbevaringsplassene."
       ],
       "source_sha256": "42444030a0c95aefc960c2a3f7a0ef02fa33efd94b3d4295e0a2ff26453bc663"
     },
@@ -2634,7 +2634,7 @@
     "storage.pack_access": {
       "title": "Hente frem gjenstander fra ryggsekken",
       "steps": [
-        "Denne handlingen med ryggsekk tar tre runder å fullføre. Fiender kan handle i løpet av disse rundene, og et angrep eller din avbrytelse kan stoppe det. \"Klar\" viktig utstyr før kamp, hvis mulig."
+        "Denne handlingen med ryggsekken tar tre trekk. Fiender kan handle i mellomtiden. Et angrep kan avbryte handlingen, og du kan avbryte selv. Gjør utstyret du trenger raskt tilgjengelig før kampen hvis du kan."
       ],
       "source_sha256": "68ce9a0651f5cd3b3f6f0cfa00a4a9173c9b2b10234538843f40c2b11cad2386"
     },
@@ -2648,7 +2648,7 @@
     "storage.partial_pickup": {
       "title": "Kun en del av stabelen passer",
       "steps": [
-        "Bare en del av forsyningen passet inn i det tilgjengelige oppbevaringsrommet. Sjekk hvor mye som er samlet, og hvilke gjenstander som fortsatt ligger på gulvet. Bruk ledig plass, eller velg et annet oppbevaringssted hvis du ønsker å ta med mer."
+        "Bare en del av stabelen fikk plass. Sjekk hvor mange du plukket opp og hva som ligger igjen på bakken. Frigjør plass eller velg et annet oppbevaringssted hvis du vil ta med mer."
       ],
       "source_sha256": "0fd1a7bb882e490e84224ed873a113e86fe8dde1b2335844098cc81e2b618929"
     },
@@ -2662,7 +2662,7 @@
     "world.run": {
       "title": "Løping og gjentatt bevegelse",
       "steps": [
-        "Bevegelsen gjentas til du stopper den, eller noe avbryter den. Fiender og timeren med minimumdybde fortsetter mellom stegene. Hvert steg tar tid; undersøk ruten din før du starter eller fortsetter en løpetur."
+        "Når du løper, gjentas bevegelsen til du stanser eller noe avbryter deg. Fiender kan handle mellom stegene, og klokken for minstedybden går videre. Hvert steg tar tid. Undersøk ruten før du begynner eller fortsetter å løpe."
       ],
       "source_sha256": "2bbe07516ae420b7d6ee1e287ea4b0a7d6f4024bf739db16b8e436fca72ce995"
     },
@@ -2676,7 +2676,7 @@
     "world.forge": {
       "title": "Ved en smie",
       "steps": [
-        "En smie har begrenset bruk. Åpne \"Smid\" mens du er der, for å inspisere mulige gjenstander og deres kostnader. Forhåndsvisningen viser vanskelighetsgrad, materialer, tid og antall smiebruk før du forplikter deg. En utslitt smie kan ikke lage en ny gjenstand."
+        "En smie har et begrenset antall ladninger. Åpne Smiing ved smia for å se hva du kan lage og hva det koster. Forhåndsvisningen viser vanskelighetsgrad, materialer, tid og forbruk av smieladninger før du bekrefter. Når smia er tom for ladninger, kan du ikke lage flere gjenstander der."
       ],
       "source_sha256": "bfad51b7c10cba58b6c689df417a9a2593120603b70bcb227b89f338f4f25828"
     },
@@ -2711,7 +2711,7 @@
     "quest.progress": {
       "title": "Framgang i oppdrag",
       "steps": [
-        "{detail} Sjekk \"Oppdrag\" for det gjenværende målet og eventuelle begrensninger. Å nå målet kan fortsatt kreve et nytt besøk for å hente belønningen. I menyen: Quests."
+        "{detail} Sjekk Oppdrag for å se det gjenstående målet og eventuelle begrensninger. Selv etter at du har nådd målet, kan det hende du må komme tilbake for å hente belønningen."
       ],
       "source_sha256": "f01b40c27b5554bae219cbd79a200bc253080620dbd7c9973fcb8c36919bcf5e"
     },
@@ -2753,7 +2753,7 @@
     "tale.silmaril": {
       "title": "En Silmaril",
       "steps": [
-        "{detail} Du har fått tak i en Silmaril. Sjekk hovedoppdraget og forbered ruten din ut av Angband. Du må fortsatt komme deg opp til overflaten for å fullføre flukten."
+        "{detail} Du har fått tak i en silmaril. Sjekk hovedoppdraget og planlegg veien ut av Angband. For å fullføre flukten må du nå overflaten med silmarilen."
       ],
       "source_sha256": "9f8860d7b3bbac6bd37d1f6987650c9b04437d1da18b5ffcc0c6d90d1ea89cd1"
     },
@@ -2844,26 +2844,26 @@
     "quest.1": {
       "title": "Tulkas, den sterke",
       "steps": [
-        "{detail} Jakt på skapningen som er nevnt i \"Oppdrag\", og returner deretter til Tulkas for å motta belønningen. Sjekk hvilke angrep målet har lært seg, før du konfronterer det. I menyen: Quests."
+        "{detail} Jakt på skapningen som er angitt under Oppdrag, og dra tilbake til Tulkas for å hente belønningen. Sjekk målets kjente angrep før du møter det."
       ],
       "source_sha256": "122273fe7ed2b38312b361b2f5607c8b838595b2cc4905172a1b8532c3d6f2ad"
     },
     "quest.2": {
       "title": "Aulë, smeden",
       "steps": [
-        "{detail} Lag et verk som oppfyller Aulés nåværende krav, og hent deretter belønningen. Les målet og forslaget for smidning før du bruker materialene. Å forlate dette nivået før belønningen er gitt, avbryter oppdraget."
+        "{detail} Smi et verk som oppfyller Aulës nåværende krav, og hent deretter belønningen. Les oppdragsmålet og smiforslaget før du bruker materialene. Forlater du nivået før du mottar belønningen, gir du opp oppdraget."
       ],
       "source_sha256": "4a57218cb48c385ecaa5c1f64a58c52a285cfdfd9dec6591958f371a3a2295f5"
     },
     "quest.3": {
-      "title": "Mandos, dommedagens bringer",
+      "title": "Mandos, dommeren",
       "steps": [
-        "{detail} Følg Mandos mål angående den bundne ånden, og deretter samle belønningen. Se \"Oppdrag\" for å finne den nøyaktige målet. Å forlate dette nivået før du mottar belønningen, avbryter oppdraget. I menyen: Quests."
+        "{detail} Frigjør den bundne ånden slik Mandos ber om, og hent så belønningen. Sjekk Oppdrag for å se det nøyaktige målet. Forlater du nivået før du mottar belønningen, gir du opp oppdraget."
       ],
       "source_sha256": "a5e15e78f02946cbd295ae422bad111088902f615f8033c7085d13be31677443"
     },
     "quest.4": {
-      "title": "Nienna, den barmhjertige",
+      "title": "Nienna, medlidenhetens frue",
       "steps": [
         "{detail} Finn trappen ned uten å ta liv, og følg anvisningene for belønningen før du går. Unngå virkninger som kan drepe, også automatiske oppfølgingsangrep. Forlater du nivået uten belønningen, gir du opp prøven."
       ],
@@ -2872,14 +2872,14 @@
     "quest.5": {
       "title": "Oromë, den store jegeren",
       "steps": [
-        "{detail} Jakten teller ulver, edderkopper, slanger og vampyrer separat. Sjekk hver totalsum i \"Oppdrag\"; å drepe flere av en gruppe fyller ikke kravene til en annen gruppe. I menyen: Quests."
+        "{detail} Jakten teller ulver, edderkopper, slanger og vampyrer hver for seg. Sjekk de gjeldende tallene i Oppdrag. Ekstra drepte skapninger i én gruppe teller ikke mot kravet for en annen gruppe."
       ],
       "source_sha256": "fa30aed71e692886518c943a0091fe1a01f7a3b8d3f5a37a03037c447a10c3e5"
     },
     "quest.6": {
-      "title": "Varda, Stjernenes Dronning",
+      "title": "Varda, stjernenes frue",
       "steps": [
-        "{detail} Sjekk Quests for å se det avslørte reisemålet. Vardas prøve er på det første nivået du når etter 500 ft. Drep Duruin før du forlater nivået, ellers går oppdraget tapt. Planlegg nedstigningen før du går inn. Uutforskede steder er fortsatt ukjente."
+        "{detail} Sjekk Oppdrag for å se hvor du skal. Vardas prøve finner sted på det første nivået du når dypere enn 500 fot. Drep Duruin før du forlater nivået, ellers går oppdraget tapt. Planlegg nedstigningen før du går inn på nivået. Uutforskede steder forblir ukjente."
       ],
       "source_sha256": "9dc0677bf69588ffd86ce8f9bdc9305838915f2e0d6f341e01b209c27f575bc2"
     },
@@ -3698,7 +3698,7 @@
     "status.smithing": {
       "title": "Smiing pågår",
       "steps": [
-        "Smidearbeidet er i gang. Arbeidet fortsetter i den tidsrammen som er angitt i den aksepterte forespørselen. Hvis arbeidet blir avbrutt, sjekk det uferdige arbeidet og de gjenværende kostnadene før du fortsetter."
+        "Smiingen er i gang. Arbeidet varer så lenge det godkjente forslaget viser. Hvis du blir avbrutt, bør du sjekke arbeidsstykket og de gjenstående kostnadene før du fortsetter."
       ],
       "source_sha256": "77a74ef2527822b1ed23a48d5853f9ea076cc8ed4ca3e1beab17678cbcca024d"
     },
@@ -3746,7 +3746,7 @@
       "source_sha256": "b85c89b23bb74b88561878bf681c5cfc81fde7632b84b55b0b1e7b86f2c26851"
     },
     "world.water": {
-      "title": "Dyp vann",
+      "title": "Grunt vann",
       "steps": [
         "Bevegelse inn i, gjennom eller ut av vann går saktere og plasker. Hver vannrute du går inn i til fots, medfører en liten sykdomsrisiko. Planlegg en tørr rute når fart eller sniking er viktig. Et vellykket hopp unngår vannkontakt, men klikker du for å gå til et sted, vasser du gjennom vannet."
       ],
@@ -3949,7 +3949,7 @@
     "Select the item, then choose Ready.": "Velg gjenstanden og deretter «Flytt til bæreselen».",
     "Select the equipment you want to wear or wield.": "Velg utstyret du vil ta på eller holde i hånden.",
     "Select an item to preview.": "Velg en gjenstand å undersøke.",
-    "Select the required item and choose Use.": "Velg den etterspurte gjenstanden og deretter Use.",
+    "Select the required item and choose Use.": "Velg gjenstanden du trenger, og velg deretter «Bruk».",
     "Choose a Throwing row, then confirm the change.": "Velg raden «Throwing» for kastevåpen og bekreft byttet.",
     "Make the requested selection in the open menu.": "Gjør det etterspurte valget i den åpne menyen.",
     "Throw active weapon": "Kast det aktive våpenet",
@@ -4075,7 +4075,7 @@
     "Stun %d: %+d to every skill.": "Bedøvelse %d: %+d på hver ferdighet.",
     "%s drain changed from %d to %d. Check the attribute breakdown; drain differs from equipment penalties or an expiring buff.": "%s: tapet endret seg fra %d til %d. Egenskapsoversikten viser tap, utstyrsfradrag og utløpende bonuser hver for seg.",
     "Health: %d/%d. Read the last attack and its effects before acting again.": "Helse: %d/%d. Se på det siste angrepet og følgene før du handler igjen.",
-    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Minste dybde er nå %d fot. Spillhandlinger får tiden til å gå. Lesing koster ingen spilletid.",
+    "Minimum depth is now %d ft. Game actions advance this pressure; time spent reading does not.": "Minstedybden er nå %d fot. Handlinger i spillet får dybdegrensen til å flytte seg nedover. Lesing koster ingen spilletid.",
     "Pack space: %d.%d/%d.%d qt.": "Plass i ryggsekken: %d,%d/%d,%d qt.",
     "Harness space: %d.%d/%d.%d qt.": "Plass i bæreselen: %d,%d/%d,%d qt.",
     "Arrows: %d. Current free Quiver space: %d.": "Piler: %d. Ledige plasser i koggeret: %d.",

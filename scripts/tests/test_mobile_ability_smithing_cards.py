@@ -15,12 +15,14 @@ def function(source, marker):
  return source[start:end]
 def typedef(source,name):
  return re.search(r'typedef struct '+name+r'\s*\{.*?\} '+name+r';',source,re.S).group(0)
-types=typedef(A,'ability_browser_layout')+typedef(A,'ability_browser_entry')
+types=typedef(A,'ability_browser_skill_tab')+typedef(A,'ability_browser_layout')+typedef(A,'ability_browser_entry')
 types+=typedef(S,'smithing_cost_type')+typedef(S,'smith_bill_line')
 for name in ('smith_sheet_layout','smith_picker_grid','smith_sheet_action'):
  types+=re.search(r'typedef struct \{[^{}]*\} '+name+r';', S).group(0)
 parts=[function(A,m) for m in ['static int ability_browser_wrap_take(',
  'static bool ability_browser_wrap_next(', 'static int ability_browser_wrapped_rows(',
+ 'static cptr ability_browser_skill_trait_suffix(', 'static int ability_browser_build_skill_tokens(',
+ 'static void ability_browser_layout_skill_tabs(',
  'static void ability_browser_init_layout_normal(',
  'static void ability_browser_init_layout(', 'static char ability_browser_entry_letter(',
  'static void ability_browser_size_entry_cards(', 'static void ability_browser_draw_ability_list(']]
@@ -59,6 +61,13 @@ typedef struct {int level;cptr state;} ability_type;
 #define TERM_L_WHITE 9
 #define TERM_SHADE 16
 #define TERM_UI_SELECTED 192
+#define S_MAX 9
+#define S_SPC 8
+static cptr skill_names_full[S_MAX]={"Melee","Archery","Evasion","Stealth","Perception","Will","Smithing","Song","Special"};
+static cptr skill_names[S_MAX]={"Mel","Arc","Evn","Stl","Per","Wil","Cmt","Sng","Spc"};
+static const void *p_ptr,*rp_ptr,*current_character_profile;
+static int affinity_level(int skill){return 0;}
+static cptr ui_text(cptr text){return text;}
 typedef struct {int k_idx;} object_type;
 static bool use_bigtile;
 static bool sdl_menu_letters_enabled(void){return false;}
@@ -117,7 +126,7 @@ int main(void){
   {.b_ptr=&facts[2],.name="Oath of the Valorous Heart forever",.attr=5}};
  for(int h=12;h<=30;h+=18) for(int p=0;p<2;p++){
   height=h;portrait=p;ability_browser_layout l;
-  ability_browser_init_layout(&l,3,"Choose an ability");
+  ability_browser_init_layout(&l,3,"Choose an ability",S_MAX,0);
   ability_browser_size_entry_cards(&l,entries,3);
   assert(l.ability_entry_rows==3);assert(l.ability_rows%3==0);
   assert(l.desc_header_row>=l.ability_row+l.ability_rows);

@@ -31,7 +31,7 @@
       "steps": [
         "{detail} Obie strony rzucają kością dwudziestościenną. Aby trafić, twój atak z wynikiem rzutu musi przewyższyć unik celu z jego rzutem. Remis oznacza pudło. Przy równych wartościach trafiasz nieco rzadziej niż w połowie przypadków.",
         "Po trafieniu rzuć na obrażenia i odejmij wynik rzutu na ochronę celu. Pancerz może pochłonąć całe obrażenia. Jeśli zadasz 8 obrażeń, a cel wyrzuci 3 ochrony, straci 5 punktów zdrowia. Rzuty znajdziesz w historii walki.",
-        "Duża przewaga nad unikiem celu daje dodatkowe kości obrażeń krytycznych. Lżejsza broń potrzebuje mniejszej przewagi. Broń do walki wręcz o masie 3 lb zwykle zyskuje jedną dodatkową kość przy przewadze 10 i dwie przy 20. Finesse obniża te progi do 8 i 16."
+        "Duża przewaga nad unikiem celu daje dodatkowe kości obrażeń krytycznych. Lżejsza broń potrzebuje mniejszej przewagi. Broń do walki wręcz o masie 3 lb zwykle zyskuje jedną dodatkową kość przy przewadze 10 i dwie przy 20. Finezyjność obniża te progi do 8 i 16."
       ],
       "source_sha256": "3ddcbbdc1e71dca2e3e61992b6ae4ef1221633525d5d566eb4064343e9e90e12"
     },
@@ -59,7 +59,7 @@
     "combat.critical": {
       "title": "Trafienia krytyczne",
       "steps": [
-        "{detail} Trafienie krytyczne dodaje kości obrażeń. Lżejsza broń potrzebuje mniejszej przewagi trafienia. W walce wręcz Finesse skraca odstęp między progami krytycznymi o 2, a Power zwiększa go o 1. Subtlety skraca go o kolejne 2 z odpowiednią bronią i wolną drugą ręką."
+        "{detail} Trafienie krytyczne dodaje kości obrażeń. Lżejsza broń potrzebuje mniejszej przewagi trafienia. W walce wręcz Finezyjność skraca odstęp między progami krytycznymi o 2, a Moc zwiększa go o 1. Subtelność skraca go o kolejne 2 z odpowiednią bronią i wolną drugą ręką."
       ],
       "source_sha256": "d11087fa085415de42d17ff51d890f23bcfb20017281a7c8d37678bd02884f41"
     },
